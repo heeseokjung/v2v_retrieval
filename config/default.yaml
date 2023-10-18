@@ -1,0 +1,75 @@
+SEED: 42
+PATH:
+  LOG_PATH: "log"
+  CKPT_PATH: "ckpt"
+RELEVANCE:
+  type: "dtw"
+  mean:
+  smooth_chamfer:
+    alpha: 16
+DATASET:
+  moma:
+    path: "/data/dir_moma"
+    paradigm: "standard"
+    tail_range: 400
+    use_over_sampling: True
+  ag:
+    path: "/data/action_genome"
+MODEL:
+  LOAD_FROM: ""
+  VIDEO:
+    name: "slot" 
+    S3D:
+      projector:
+        in_dim: 1024
+        hidden_dim: 512
+        out_dim: 256
+        dropout: 0.1
+      use_kinetics_pretrained: True
+      freeze: True
+      clip_duration: 8
+      frames_per_clip: 64
+      stride: 2
+    FROZEN:
+      projector:
+        in_dim: 768
+        hidden_dim: 384
+        out_dim: 256
+        dropout: 0.1
+      num_frames: 4
+      time_init: "zeors"
+      attention_style: "frozen-in-time"
+      emb_type: "set" # "flat" or "set"
+      use_cc_web_pretrained: True
+      freeze: True
+      clip_duration: 8
+    TRANSFORMER:
+      d_model: 768
+      nhead: 8
+      dim_feedforward: 1024
+      dropout: 0.1
+      num_layers: 2
+  SLOT: 
+    input_size: 768
+    slot_size: 384
+    mlp_hidden_size: 384
+    init_type: "gaussian"
+    num_slots: 8
+    num_iterations: 3
+    epsilon: 0.0001
+TRAIN:
+  dataset: "moma"
+  optimizer: "adam"
+  batch_size: 16
+  num_workers: 0
+  pin_memory: True
+  persistent_workers: False
+  num_epochs: 400
+  lr: 0.00001
+EVAL:
+  dataset: "moma"
+  num_workers: 0
+  pin_memory: True
+  persistent_workers: False
+TRAINER:
+  logger: "wandb"

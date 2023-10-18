@@ -1,0 +1,131 @@
+< awards ceremony >
+    11. the audience and host are cheering the award recipient on stage (34.51)
+    12. the award winner is delivering a speech on stage (36.27)
+    48. the host is giving the award winner an award (20.15)
+    49. the host is introducing the award winner (9.07)
+
+< babysitting >
+    4. the adult is comforting the child (33.80)
+    6. the adult is feeding the child (17.84)
+    8. the adult is playing with the child (33.80)
+    9. the adult is pushing the stroller (4.93)
+    10. the adult is wrapping the child or changing the child's diaper or clothes (9.62)
+
+< basketball game >
+    22. the basketball player is dribbling or shooting a basket (34.70)
+    23. the basketball player is shooting a free throw (2.18)
+    24. the basketball players are in a timeout (17.62)
+    62. the players are passing the basketball (45.51)
+
+< beauty salon service >
+    50. the massage therapist is applying nail polish to the customer's nails (29.15)
+    51. the massage therapist is cleaning the customer's nails (7.87)
+    52. the massage therapist is cutting the customer's nails (5.25)
+    53. the massage therapist is filing the customer's nails (25.07)
+    54. the massage therapist is massaging or applying oils or creams to the customer's hands or feet (32.65)
+
+< bike lesson >
+    3. the adult is chasing after the child on the bike (29.65)
+    5. the adult is explaining to the child how to ride a bike (13.66)
+    7. the adult is holding the child on the bike (22.09)
+    28. the child falls off the bike (34.59)
+
+< car racing pitstop >
+    66. the repairmen are fixing the car's tires (66.06)
+    67. the repairmen are leaving while the car is departing (11.59)
+    68. the repairmen are watching the car driving towards the repair station (22.36)
+
+< dining >
+    29. the customers are raising their glasses (18.82)
+    82. the waiter is cleaning the table (14.00)
+    83. the waiter is is talking to the customer or helping them into their seat (22.98)
+    84. the waiter is placing utensils on the table (6.35)
+    85. the waiters are placing food on the table (9.85)
+    86. the waiters are pouring or presenting drinks for the customers (18.82)
+    87. the waiters are taking orders from the customers (9.19)
+
+< drive-thru ordering >
+    31. the driver is ordering food through a speaker (19.01)
+    32. the driver is paying for food (16.90)
+    33. the driver is receiving food and drink (44.37)
+    35. the driver is talking to people outside the car (19.72)
+
+< field sobriety test >
+    30. the driver is being asked to look in a specific direction (12.05)
+    34. the driver is speaking with the police officer (49.49)
+    58. the person is being asked to blow into an alcohol tester (18.97)
+    59. the person is being asked to stand on one leg by the police (4.62)
+    60. the person is being asked to walk straight by the police (14.87)
+
+< firefighting >
+    36. the firefighters are doing other work (44.54)
+    37. the firefighters are exiting the firetruck towards the scene (3.29)
+    38. the firefighters are extinguishing fire (36.66)
+    39. the firefighters are talking (15.51)
+
+< frisbee game >
+    2. players are trying to catch a frisbee (45.98)
+    61. the player is throwing a frisbee (54.02)
+
+< haircut >
+    13. the barber is applying shampoo (7.30)
+    14. the barber is combing hair (10.85)
+    15. the barber is cutting hair with a razor (14.39)
+    16. the barber is cutting hair with scissors (11.39)
+    17. the barber is drying hair (6.71)
+    18. the barber is massaging the customer's face or applying products (14.07)
+    19. the barber is shaving a beard with a razor (20.52)
+    20. the barber is shaving a beard with scissors (5.80)
+    21. the barber is washing the customer's hair (8.97)
+
+< marriage proposal >
+    0. one person is on their knees while proposing (45.74)
+    1. one person is putting a ring on their partner (8.74)
+    88. two people are hugging (19.28)
+    89. two people are kissing (10.54)
+    90. two people are talking (15.70)
+
+< medical injection >
+    43. the health worker is injecting the patient with the syringe (48.91)
+    44. the health worker is preparing equipment for the injection (10.87)
+    45. the health worker is stopping the patient's bleeding (15.58)
+    46. the health worker is talking to the patient (6.88)
+    47. the health worker is using an alcohol swab on the patient's skin before the injection (17.75)
+
+< physical therapy >
+    25. the caregiver is helping the patient into a seat or a bed (11.63)
+    26. the caregiver is helping the patient out of the bed or chair (28.49)
+    27. the caregiver is helping the patient walk down the stairs (30.81)
+    57. the patient is walking with physical therapy parallel bars (29.07)
+
+< piano lesson >
+    73. the student is playing the piano while the teacher watches (37.73)
+    78. the teacher and student are playing the piano together (5.32)
+    79. the teacher is playing the piano (24.54)
+    80. the teacher is verbally instructing the student (32.41)
+
+< reception service >
+    41. the guests are departing from the front desk (3.74)
+    42. the guests are walking to the front desk (6.60)
+    64. the receptionist is exchanging items with the guests (39.39)
+    65. the receptionist is talking to guests (50.27)
+
+< security screening >
+    55. the passengers are placing their bags on the security inspection belt (7.53)
+    56. the passengers are walking through the security gate (17.92)
+    69. the security officer is inspecting a bag (17.20)
+    70. the security officer is inspecting a passenger (57.35)
+
+< soccer game >
+    40. the goalkeeper is saving a shot (36.70)
+    63. the players are passing the soccer ball (39.37)
+    71. the soccer player is dribbling towards the goal (5.69)
+    72. the soccer players are celebrating (18.23)
+
+< table tennis game >
+    74. the table tennis player is hitting the ball into the net which ends the point (8.55)
+    75. the table tennis player is serving the ball (29.72)
+    76. the table tennis players are not playing the game right now (8.94)
+    77. the table tennis players are rallying with each other (31.97)
+    81. the tennis table player is failing to return the ball (20.82)
+
