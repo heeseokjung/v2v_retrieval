@@ -7,3 +7,5 @@ def compute_mse_loss(pred, surrogate):
     loss = nn.MSELoss(reduction="mean")
     return loss(pred, surrogate)
     
+def compute_var_hinge_loss(var):
+    ...

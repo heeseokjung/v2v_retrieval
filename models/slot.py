@@ -91,6 +91,7 @@ class SlotAttention(nn.Module):
             # Weighted mean
             attn = attn + self.args.epsilon
             attn = attn / torch.sum(attn, dim=-2, keepdim=True) # n x n_slot
+            updates = torch.mm(attn.t(), v) # n_slots x d
 
             ############# visualization ############
             # tmp_inputs = inputs[:]
@@ -106,8 +107,6 @@ class SlotAttention(nn.Module):
             # plt.savefig(f"/root/slot_vis/slot/{self.count}_iter{i}.png")
             # plt.close()
             ########################################
-
-            updates = torch.mm(attn.t(), v) # n_slots x d
 
             # Slot update
             slots = self.gru(updates, slots_prev)

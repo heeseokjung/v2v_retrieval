@@ -29,6 +29,14 @@ def smooth_chamfer_similarity(x, y, alpha):
     return left_term + right_term
 
 
+def smooth_chamfer_train(x, y, alpha):
+    x = F.normalize(x, dim=-1)
+    y = F.normalize(y, dim=-1)
+    c = torch.mm(x, y.t())
+
+    return torch.logsumexp(alpha*c, dim=1).sum() / (2. * alpha * x.shape[0])
+
+
 def DTW(p, q, sim):
     D = np.zeros((len(p) + 1, len(q) + 1))
 

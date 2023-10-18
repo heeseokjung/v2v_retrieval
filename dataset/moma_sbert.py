@@ -16,6 +16,7 @@ def main():
         seq = []
         for sact in moma.get_anns_sact(ids_sact=act.ids_sact):
             seq.append(sact.cname)
+        seq = list(set(seq))
         with torch.no_grad():
             emb = sbert.encode(seq)
             emb = torch.from_numpy(emb).float()

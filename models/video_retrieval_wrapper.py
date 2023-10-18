@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 from utils.similarity import (
     cosine_mean_similarity,
     smooth_chamfer_similarity,
+    smooth_chamfer_train,
 )
 
 from utils.loss import compute_mse_loss
@@ -78,18 +79,19 @@ class VideoRetrievalWrapper(pl.LightningModule):
                 elif self.cfg.RELEVANCE.type == "dtw":
                     pred.append(cosine_mean_similarity(anchor_emb, pair_emb))
 
-                alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
-                vt_algin_loss.append(
-                    -1.*smooth_chamfer_similarity(anchor_emb, self.id2cembs_train[anchor_vid].to("cuda"), alpha)
-                )
-                vt_algin_loss.append(
-                    -1.*smooth_chamfer_similarity(pair_emb, self.id2cembs_train[pair_vid].to("cuda"), alpha)
-                )
+                # alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
+                # vt_algin_loss.append(
+                #     smooth_chamfer_train(anchor_emb, self.id2cembs_train[anchor_vid].to("cuda"), alpha)
+                # )
+                # vt_algin_loss.append(
+                #     smooth_chamfer_train(pair_emb, self.id2cembs_train[pair_vid].to("cuda"), alpha)
+                # )
 
             pred = torch.stack(pred)
-            vt_algin_loss = torch.stack(vt_algin_loss).mean()
-            mse_loss = compute_mse_loss(pred, relevance_scores)
-            loss = mse_loss + 0.5*vt_algin_loss
+            # vt_algin_loss = -1. * F.relu(torch.stack(vt_algin_loss).mean())
+            # mse_loss = compute_mse_loss(pred, relevance_scores)
+            # loss = mse_loss + 0.01*vt_algin_loss
+            loss = compute_mse_loss(pred, relevance_scores)
 
             self.log(
                 "train/loss",
@@ -100,23 +102,23 @@ class VideoRetrievalWrapper(pl.LightningModule):
                 sync_dist=True,
             ) 
 
-            self.log(
-                "train/mse_loss",
-                mse_loss,
-                on_step=True,
-                prog_bar=True,
-                logger=True,
-                sync_dist=True,
-            )
+            # self.log(
+            #     "train/mse_loss",
+            #     mse_loss,
+            #     on_step=True,
+            #     prog_bar=True,
+            #     logger=True,
+            #     sync_dist=True,
+            # )
 
-            self.log(
-                "train/vt_align_loss",
-                0.5*vt_algin_loss,
-                on_step=True,
-                prog_bar=True,
-                logger=True,
-                sync_dist=True,
-            )
+            # self.log(
+            #     "train/vt_align_loss",
+            #     0.5*vt_algin_loss,
+            #     on_step=True,
+            #     prog_bar=True,
+            #     logger=True,
+            #     sync_dist=True,
+            # )
         else:
            anchor_video_embs = self(anchor_videos)
            pair_video_embs = self(pair_videos)
@@ -126,16 +128,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
            pred = torch.mm(anchor_video_embs, pair_video_embs.t()).diagonal()
 
            loss = compute_mse_loss(pred, relevance_scores)
-        
-        # self.log(
-        #     "train/loss",
-        #     loss,
-        #     on_step=True,
-        #     prog_bar=True,
-        #     logger=True,
-        #     sync_dist=True,
-        # )
-        
+           
         return loss
     
     # for caching embeddings
