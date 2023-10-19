@@ -180,7 +180,7 @@ def init_trainer(cfg):
     
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[1],
+        devices=[2],
         logger=logger,
         log_every_n_steps=1,
         num_sanity_val_steps=0,

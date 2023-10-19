@@ -41,8 +41,8 @@ class VideoRetrievalWrapper(pl.LightningModule):
         if self.cfg.MODEL.VIDEO.name == "slot":
             # data: n_clips x d (CLS 토큰들의 시퀀스)
             x = self.video_encoder(data) # 트랜스포머 인코더 한번 태우는거
-            slots, vars = self.slot_encoder(x) # n_slot x d
-            return slots, vars
+            slots, var = self.slot_encoder(x) # n_slot x d
+            return slots, var
         else:
             return self.video_encoder(data) # b x d
     
@@ -60,21 +60,23 @@ class VideoRetrievalWrapper(pl.LightningModule):
         relevance_scores = batch["relevance_scores"]
 
         if self.cfg.MODEL.VIDEO.name == "slot":
-            anchor_video_embs, anchor_video_vars = [], []
-            for video in anchor_videos:
-                slot, vars = self(video)
-                anchor_video_embs.append(slot)
-                anchor_video_vars.append(vars)
+            vars = [] # for var hinge loss
 
-            pair_video_embs, pair_video_vars = [], []
+            anchor_video_embs = []
+            for video in anchor_videos:
+                slot, var = self(video)
+                anchor_video_embs.append(slot)
+                vars.append(var)
+
+            pair_video_embs = []
             for video in pair_videos:
-                slot, vars = self(video)
+                slot, var = self(video)
                 pair_video_embs.append(slot)
-                pair_video_vars.append(vars)
+                vars.append(var)
 
             pred, vt_algin_loss, var_hinge_loss = [], [], []
-            for anchor_vid, anchor_emb, anchor_vars, pair_vid, pair_emb, pair_vars in zip(
-                anchor_video_ids, anchor_video_embs, anchor_video_vars, pair_video_ids, pair_video_embs, pair_video_vars
+            for anchor_vid, anchor_emb, pair_vid, pair_emb in zip(
+                anchor_video_ids, anchor_video_embs, pair_video_ids, pair_video_embs,
             ):
                 if self.cfg.RELEVANCE.type == "mean":
                     pred.append(cosine_mean_similarity(anchor_emb, pair_emb))
@@ -92,13 +94,11 @@ class VideoRetrievalWrapper(pl.LightningModule):
                 #     smooth_chamfer_train(pair_emb, self.id2cembs_train[pair_vid].to("cuda"), alpha)
                 # )
 
-                var_hinge_loss.append(compute_var_hinge_loss(anchor_vars))
-                var_hinge_loss.append(compute_var_hinge_loss(pair_vars))
 
             pred = torch.stack(pred)
             mse_loss = compute_mse_loss(pred, relevance_scores)
-            var_hinge_loss = torch.stack(var_hinge_loss).mean()
-            loss = mse_loss + 0.5 * var_hinge_loss
+            var_hinge_loss = compute_var_hinge_loss(torch.stack(vars))
+            loss = mse_loss + 0.005 * var_hinge_loss
             # vt_algin_loss = -1. * F.relu(torch.stack(vt_algin_loss).mean())
             # mse_loss = compute_mse_loss(pred, relevance_scores)
             # loss = mse_loss + 0.01*vt_algin_loss
@@ -124,7 +124,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
 
             self.log(
                 "train/var_hinge_loss",
-                0.5*var_hinge_loss,
+                0.1*var_hinge_loss,
                 on_step=True,
                 prog_bar=True,
                 logger=True,
@@ -147,7 +147,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
         if vid in self.id2emb:
             return self.id2emb[vid]
         else:
-            emb, vars = self(data) # d or n_slot x d
+            emb, var = self(data) # d or n_slot x d
             # emb = emb.to("cpu")
             self.id2emb[vid] = emb
             return emb
@@ -240,4 +240,3 @@ class VideoRetrievalWrapper(pl.LightningModule):
             )
             
         return optimizer
-        
