@@ -78,6 +78,7 @@ class SlotAttention(nn.Module):
             raise NotImplementedError
         
         # Multiple rounds of attention
+        vars = []
         for i in range(self.args.num_iterations):
             slots_prev = slots
             slots = self.norm_slots(slots)
@@ -91,6 +92,7 @@ class SlotAttention(nn.Module):
             # Weighted mean
             attn = attn + self.args.epsilon
             attn = attn / torch.sum(attn, dim=-2, keepdim=True) # n x n_slot
+            vars.append(attn.var(dim=1)) # for var hinge loss (n,)
             updates = torch.mm(attn.t(), v) # n_slots x d
 
             ############# visualization ############
@@ -114,4 +116,4 @@ class SlotAttention(nn.Module):
 
         # self.count += 1
 
-        return slots
+        return slots, torch.stack(vars, dim=0).mean(dim=0) # n_slot x d, n

@@ -16,7 +16,7 @@ DATASET:
   ag:
     path: "/data/action_genome"
 MODEL:
-  LOAD_FROM: ""
+  LOAD_FROM: "ours"
   VIDEO:
     name: "slot" 
     S3D:
