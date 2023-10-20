@@ -11,6 +11,10 @@ class nDCGMetric:
         _, pred_idx = torch.topk(pred, max(self.topK))
         _, opt_idx = torch.topk(proxy, max(self.topK))
         
+        ############## nDCG normalize ################
+        # proxy = (proxy - 0.2) /  0.2
+        ##############################################
+
         for k in self.topK:
             pred_rel = proxy[pred_idx[:k]]
             opt_rel = proxy[opt_idx[:k]]

@@ -1,0 +1,20 @@
+"awards ceremony": 91
+"babysitting": 64
+"basketball game": 143
+"beauty salon service": 42
+"bike lesson": 62
+"car racing pitstop": 55
+"dining": 55
+"drive-thru ordering": 25
+"field sobriety test": 55
+"firefighting": 91
+"frisbee game": 50
+"haircut": 129
+"marriage proposal": 81
+"medical injection": 65
+"physical therapy": 45
+"piano lesson": 55
+"reception service": 44
+"security screening": 46
+"soccer game": 109
+"table tennis game": 105

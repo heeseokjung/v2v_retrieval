@@ -151,7 +151,10 @@ def init_model(cfg):
         video_encoder = None
 
     # Load slot attention model
-    slot_encoder = SlotAttention(cfg)
+    if cfg.MODEL.VIDEO.name == "slot":
+        slot_encoder = SlotAttention(cfg)
+    else:
+        slot_encoder = None
 
     if "LOAD_FROM" in cfg.MODEL and len(cfg.MODEL.LOAD_FROM) > 0:
         model = VideoRetrievalWrapper.load_from_checkpoint(
@@ -180,7 +183,7 @@ def init_trainer(cfg):
     
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[2],
+        devices=[1],
         logger=logger,
         log_every_n_steps=1,
         num_sanity_val_steps=0,
