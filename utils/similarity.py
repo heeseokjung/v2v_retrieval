@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 
-def cosine_mean_similarity(x, y):
+def compute_cosine_mean_similarity(x, y):
     # x: n x d
     # y: m x d
     # assume that x, y are not normalized
@@ -14,7 +14,7 @@ def cosine_mean_similarity(x, y):
     return torch.mm(x, y.t()).mean()
 
 
-def smooth_chamfer_similarity(x, y, alpha):
+def compute_smooth_chamfer_similarity(x, y, alpha):
     # x: n x d
     # y: m x d
     # assume that x, y are not normalized
@@ -37,34 +37,20 @@ def smooth_chamfer_train(x, y, alpha):
     return torch.logsumexp(alpha*c, dim=1).sum() / (2. * alpha * x.shape[0])
 
 
-def DTW(p, q, sim):
-    D = np.zeros((len(p) + 1, len(q) + 1))
+def compute_dtw_similarity(x, y):
+    nx = F.normalize(x, dim=-1)
+    ny = F.normalize(y, dim=-1)
+    z = torch.mm(nx, ny.t())
 
-    for i in range(1, len(p)+1):
-        for j in range(1, len(q)+1):
-            s = sim[p[i-1], q[j-1]]
-            D[i,j] = max(D[i-1,j], D[i,j-1], D[i-1,j-1] + s)
+    m, n = z.shape[0], z.shape[1]
+    R = torch.ones((m+1, n+1)).to(x.device) * -float("inf")
+    R[0,0] = 0.
 
-    path, count = backtrack(p, q, sim, D)
+    for i in range(1, m+1):
+        for j in range(1, n+1):
+            r0 = R[i-1, j-1] + 2*z[i-1, j-1]
+            r1 = R[i-1, j] + z[i-1, j-1]
+            r2 = R[i, j-1] + z[i-1, j-1]
+            R[i, j] = max(r0, r1, r2) 
 
-    return D, path, count
-
-
-def backtrack(p, q, sim, D):
-    path, count = [], 0
-    i, j = len(p), len(q)
-
-    while i >= 1 and j >= 1:
-        path.append((i-1, j-1))
-        s = sim[p[i-1], q[j-1]]
-        if D[i,j] == D[i-1,j]:
-            i = i -1
-        elif D[i,j] == D[i,j-1]:
-            j = j - 1
-        elif D[i,j] == D[i-1,j-1] + s:
-            i, j = i - 1, j - 1
-            count += 1
-        else:
-            raise ValueError
-        
-    return path[::-1], count
+    return R[m, n] / (m + n)

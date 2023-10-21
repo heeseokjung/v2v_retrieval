@@ -6,9 +6,9 @@ import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 from utils.similarity import (
-    cosine_mean_similarity,
-    smooth_chamfer_similarity,
-    DTW,
+    compute_cosine_mean_similarity,
+    compute_smooth_chamfer_similarity,
+    compute_dtw_similarity,
 )
 from utils.clip_sampler import (
     s3d_clip_sampler,
@@ -33,39 +33,46 @@ class MOMARetrievalBaseDataset(Dataset):
         self.graph_cache = {}
 
     def _load_anno_data(self, split):
-        with open(
-            f"dataset/anno/moma/{self.args.paradigm}_{split}.ndjson", "r"
-        ) as f:
+        with open(f"anno/moma/{split}.ndjson", "r") as f:
             self.anno = ndjson.load(f)
-
-    def _load_caption_emb(self):
-        if self.cfg.RELEVANCE.type == "dtw":
-            self.id2seq = torch.load("dataset/anno/moma/id2seq.pt")
-            self.sact_cemb_sim = torch.load("dataset/anno/moma/sact_cemb_sim.pt")
-        else:
-            self.caption_emb_lookup = torch.load(f"dataset/anno/moma/{self.args.paradigm}_id2cembs.pt")
+        self.id2cemb = torch.load("anno/moma/id2cemb.pt")
 
     def _set_pairwise_similarity(self):
-        self.similarity = torch.zeros(len(self.anno), len(self.anno))
-        for i in tqdm(range(len(self.anno)), desc=f"Compute pair-wise similarity matrix:"):
-            for j in range(len(self.anno)):
-                if self.cfg.RELEVANCE.type == "mean":
-                    c_i = self.caption_emb_lookup[self.anno[i]["video_id"]]
-                    c_j = self.caption_emb_lookup[self.anno[j]["video_id"]]
-                    self.similarity[i][j] = cosine_mean_similarity(c_i, c_j)
-                elif self.cfg.RELEVANCE.type == "smooth-chamfer":
-                    c_i = self.caption_emb_lookup[self.anno[i]["video_id"]]
-                    c_j = self.caption_emb_lookup[self.anno[j]["video_id"]]
-                    alpha = self.RELEVANCE.smooth_chamfer.alpha
-                    self.similarity[i][j] = smooth_chamfer_similarity(c_i, c_j, alpha)
-                elif self.cfg.RELEVANCE.type == "dtw":
-                    p = self.id2seq[self.anno[i]["video_id"]]
-                    q = self.id2seq[self.anno[j]["video_id"]]
-                    D, path, count = DTW(p, q, self.sact_cemb_sim)
-                    if count > 0:
-                        self.similarity[i][j] = D[len(p), len(q)] / count
-                else:
-                    raise NotImplementedError
+        type = self.cfg.RELEVANCE.type
+        if os.path.exists(f"anno/moma/sm_{type}.pt"):
+            print(f"Load from pre-computed surrogate measure [{type}]")
+            self.sm = torch.load(f"anno/moma/sm_{type}.pt")
+        else:
+            self.sm = torch.zeros(len(self.anno), len(self.anno))
+            check = np.zeros((len(self.anno), len(self.anno))).bool()
+            for i in tqdm(range(len(self.anno)), desc=f"Compute pair-wise surrogate measure [{type}]"):
+                for j in range(len(self.anno)):
+                    if check[j][i]:
+                        self.sm[i][j] = self.sm[j][i]
+                        continue
+                    if type == "mean":
+                        c_i = self.id2cemb[self.anno[i]["video_id"]]
+                        c_j = self.id2cemb[self.anno[j]["video_id"]]
+                        self.sm[i][j] = compute_cosine_mean_similarity(c_i, c_j)
+                        check[i][j] = True
+                    elif type == "smooth-chamfer":
+                        c_i = self.id2cemb[self.anno[i]["video_id"]]
+                        c_j = self.id2cemb[self.anno[j]["video_id"]]
+                        alpha = self.RELEVANCE.smooth_chamfer.alpha
+                        self.sm[i][j] = compute_smooth_chamfer_similarity(c_i, c_j, alpha)
+                        check[i][j] = True
+                    elif type == "dtw":
+                        c_i = self.id2cemb[self.anno[i]["video_id"]]
+                        c_j = self.id2cemb[self.anno[j]["video_id"]]
+                        # s_ij = compute_dtw_similarity(c_i, c_j)
+                        # s_ji = compute_dtw_similarity(c_j, c_i)
+                        # self.sm[i][j] = (s_ij + s_ji) / 2
+                        self.sm[i][j] = compute_dtw_similarity(c_i, c_j)
+                        check[i][j] = True
+                    else:
+                        raise NotImplementedError
+                    
+            torch.save(self.sm, f"anno/moma/sm_{type}.pt")
                 
     def transform_s3d(self, snippet):
         ''' stack & noralization '''

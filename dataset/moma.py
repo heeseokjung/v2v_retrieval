@@ -9,7 +9,7 @@ class MOMARetrievalTrainDataset(MOMARetrievalBaseDataset):
         super().__init__(cfg, "train")
         
     def sample_pair(self, idx):
-        scores = self.similarity[idx]
+        scores = self.sm[idx]
         _, sorted_idx = torch.sort(scores, descending=True)
         sorted_idx = sorted_idx[1:] # exclude self
         
@@ -32,26 +32,27 @@ class MOMARetrievalTrainDataset(MOMARetrievalBaseDataset):
         
         
 class MOMARetrievalEvalDataset(MOMARetrievalBaseDataset):
-    def __init__(self, cfg):
-        super().__init__(cfg, "val")
+    def __init__(self, cfg, split):
+        if split == "val": 
+            super().__init__(cfg, "val")
+        elif split == "test":
+            super().__init__(cfg, "test")
 
         self._prepare_batches()
         
     def _prepare_batches(self):
         self.batches = []
-        for i, anno in enumerate(self.anno):
+        for i, query in enumerate(self.anno):
             batch = {
-                "query_video_id": anno["video_id"], # video id e.g. '-49z-lj8eYQ'
-                "query_activity_id": anno["activity_id"], # activity class id e.g. 2
-                "query_activity_name": anno["activity_name"], # activity name e.g. "basketball game"
-                "ref_video_ids": [x["video_id"] for x in self.anno if anno["video_id"] != x["video_id"]],
-                "ref_activity_ids": [x["activity_id"] for x in self.anno if anno["video_id"] != x["video_id"]],
-                "ref_activity_names": [x["activity_name"] for x in self.anno if anno["video_id"] != x["video_id"]],
+                "query_video_id": query["video_id"], # video id e.g. '-49z-lj8eYQ'
+                "query_activity_name": query["activity_name"], # activity name e.g. "basketball game"
+                "ref_video_ids": [x["video_id"] for x in self.anno if query["video_id"] != x["video_id"]],
+                "ref_activity_names": [x["activity_name"] for x in self.anno if query["video_id"] != x["video_id"]],
             }
 
-            relevance_scores = torch.cat([self.similarity[i][:i], self.similarity[i][i+1:]])
-            relevance_scores = torch.clamp(relevance_scores, min=0.)
-            batch["relevance_scores"] = relevance_scores
+            sm = torch.cat([self.sm[i][:i], self.sm[i][i+1:]])
+            # relevance_scores = torch.clamp(relevance_scores, min=0.)
+            batch["sm"] = sm
             
             self.batches.append(batch)
 

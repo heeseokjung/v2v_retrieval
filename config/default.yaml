@@ -67,6 +67,7 @@ TRAIN:
   num_epochs: 400
   lr: 0.00001
 EVAL:
+  split: "val"
   dataset: "moma"
   num_workers: 0
   pin_memory: True

@@ -7,8 +7,8 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 
 from utils.similarity import (
-    cosine_mean_similarity,
-    smooth_chamfer_similarity,
+    compute_cosine_mean_similarity,
+    compute_smooth_chamfer_similarity,
     smooth_chamfer_train,
 )
 
@@ -31,7 +31,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
         self.id2emb = {}
         self.eval_query_vids = []
         self.eval_ref_vids = []
-        self.eval_relevance_scores = []
+        self.eval_sm_l = []
         self.ndcg_metric = nDCGMetric([5, 10, 20, 40])
         self.mse_error = MSEError()
 
@@ -50,16 +50,14 @@ class VideoRetrievalWrapper(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         anchor_video_ids = batch["anchor_video_ids"]
-        anchor_activity_ids = batch["anchor_activity_ids"]
-        anchor_activity_names = batch["anchor_activity_names"]
+        # anchor_activity_names = batch["anchor_activity_names"] # dataset dependent field
         anchor_videos = batch["anchor_videos"]
         
         pair_video_ids = batch["pair_video_ids"]
-        pair_activity_ids = batch["pair_activity_ids"]
-        pair_activity_names = batch["pair_activity_names"]
+        # pair_activity_names = batch["pair_activity_names"] # dataset dependent field
         pair_videos = batch["pair_videos"]
         
-        relevance_scores = batch["relevance_scores"]
+        sm = batch["sm"]
 
         if self.cfg.MODEL.VIDEO.name == "slot":
             anchor_video_embs = []
@@ -80,12 +78,12 @@ class VideoRetrievalWrapper(pl.LightningModule):
                 anchor_video_ids, anchor_video_embs, pair_video_ids, pair_video_embs,
             ):
                 if self.cfg.RELEVANCE.type == "mean":
-                    pred.append(cosine_mean_similarity(anchor_emb, pair_emb))
+                    pred.append(compute_cosine_mean_similarity(anchor_emb, pair_emb))
                 elif self.cfg.RELEVANCE.type == "smooth-chamfer":
                     alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
-                    pred.append(smooth_chamfer_similarity(anchor_emb, pair_emb, alpha))
+                    pred.append(compute_smooth_chamfer_similarity(anchor_emb, pair_emb, alpha))
                 elif self.cfg.RELEVANCE.type == "dtw":
-                    pred.append(cosine_mean_similarity(anchor_emb, pair_emb))
+                    pred.append(compute_cosine_mean_similarity(anchor_emb, pair_emb))
 
                 # for Smooth-Chamfer loss (L2)
                 alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
@@ -104,7 +102,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
 
             # predict surrogate measure (L1)
             pred = torch.stack(pred)
-            mse_loss = compute_mse_loss(pred, relevance_scores)
+            mse_loss = compute_mse_loss(pred, sm)
 
             # variance regularizer (L3)
             cov = torch.stack(cov, dim=0) # b x k x k
@@ -176,7 +174,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
            pair_video_embs = F.normalize(pair_video_embs, dim=-1) # b x d
            pred = torch.mm(anchor_video_embs, pair_video_embs.t()).diagonal()
 
-           loss = compute_mse_loss(pred, relevance_scores)
+           loss = compute_mse_loss(pred, sm)
 
         return loss
     
@@ -192,20 +190,20 @@ class VideoRetrievalWrapper(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         query_video_id = batch["query_video_id"]
-        query_activity_name = batch["query_activity_name"]
+        # query_activity_name = batch["query_activity_name"] # dataset dependent field
         query_video = batch["query_video"]
 
         ref_video_ids = batch["ref_video_ids"]
-        ref_activity_names = batch["ref_activity_names"]
+        # ref_activity_names = batch["ref_activity_names"] # dataset dependent field
         if "ref_videos" in batch:
             ref_videos = batch["ref_videos"]
 
-        relevance_scores = batch["relevance_scores"]
+        sm = batch["sm"]
 
         if self.cfg.MODEL.VIDEO.name == "slot":
             self.eval_query_vids.append(query_video_id)
             self.eval_ref_vids.append(ref_video_ids)
-            self.eval_relevance_scores.append(relevance_scores)
+            self.eval_sm_l.append(sm)
             query_video_emb = self.val_shared_step(query_video_id, query_video)  
         else:
             query_video_emb = self.val_shared_step(query_video_id, query_video)
@@ -218,29 +216,29 @@ class VideoRetrievalWrapper(pl.LightningModule):
             ref_video_embs = F.normalize(ref_video_embs, dim=-1)
             pred = torch.matmul(query_video_emb, ref_video_embs.t())
 
-            self.ndcg_metric.update(pred, relevance_scores)
-            self.mse_error.update(pred, relevance_scores)
+            self.ndcg_metric.update(pred, sm)
+            self.mse_error.update(pred, sm)
         
     def validation_epoch_end(self, validation_step_outputs):
         if self.cfg.MODEL.VIDEO.name == "slot":
-            for query_vid, ref_vids, relevance_scores in zip(
-                self.eval_query_vids, self.eval_ref_vids, self.eval_relevance_scores
+            for query_vid, ref_vids, sm in zip(
+                self.eval_query_vids, self.eval_ref_vids, self.eval_sm_l
             ):
                 pred = []
                 query_video_emb = self.id2emb[query_vid]
                 ref_video_embs = [self.id2emb[vid] for vid in ref_vids]
                 for ref_emb in ref_video_embs:
                     if self.cfg.RELEVANCE.type == "mean":
-                        pred.append(cosine_mean_similarity(query_video_emb, ref_emb))
+                        pred.append(compute_cosine_mean_similarity(query_video_emb, ref_emb))
                     elif self.cfg.RELEVANCE.type == "smooth-chamfer":
                         alpha = self.RELEVANCE.smooth_chamfer.alpha
-                        pred.append(smooth_chamfer_similarity(query_video_emb, ref_emb, alpha))
+                        pred.append(compute_smooth_chamfer_similarity(query_video_emb, ref_emb, alpha))
                     elif self.cfg.RELEVANCE.type == "dtw":
-                        pred.append(cosine_mean_similarity(query_video_emb, ref_emb))
+                        pred.append(compute_cosine_mean_similarity(query_video_emb, ref_emb))
                 pred = torch.stack(pred)
 
-                self.ndcg_metric.update(pred, relevance_scores)
-                self.mse_error.update(pred, relevance_scores)
+                self.ndcg_metric.update(pred, sm)
+                self.mse_error.update(pred, sm)
 
         score = self.ndcg_metric.compute()
         score["mse_error"] = self.mse_error.compute()
@@ -261,7 +259,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
         self.id2emb = {}
         self.eval_query_vids = []
         self.eval_ref_vids = []
-        self.eval_relevance_scores = []
+        self.eval_sm_l = []
         self.ndcg_metric.reset()
         self.mse_error.reset()
         
