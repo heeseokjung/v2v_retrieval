@@ -128,7 +128,7 @@ def moma_triplet_generator(
         feat_type="s3d", 
         n_sample_per_class=25, 
         topk=20,
-        threshold=0.3,
+        threshold=0.05,
     ):
     root_path = "/data/dir_moma"
     feat_path = os.path.join(root_path, "feats", feat_type)
@@ -137,6 +137,7 @@ def moma_triplet_generator(
     act_taxonomy = moma.taxonomy["act"]
     vid2seqembs = preprocess_moma()
 
+    diffs = []
     for cname in tqdm(act_taxonomy, desc="[MOMA] generate triplets"):
         ids_act = moma.get_ids_act(cnames_act=cname)
         # print(f"class: {cname} size: {len(ids_act)}")
@@ -154,9 +155,10 @@ def moma_triplet_generator(
                 
                 query_video = vid2seqembs[qvid]
                 video1, video2 = vid2seqembs[vid1], vid2seqembs[vid2]
-                rel1 = compute_dtw_score_allow_gap(query_video, video1, 0, 0)
-                rel2 = compute_dtw_score_allow_gap(query_video, video2, 0, 0)
+                rel1 = compute_dtw_score(query_video, video1, 0, 0)
+                rel2 = compute_dtw_score(query_video, video2, 0, 0)
                 if abs(rel1 - rel2) > threshold:
+                    diffs.append(abs(rel1 - rel2))
                     break
 
             global triplet_idx
@@ -177,6 +179,9 @@ def moma_triplet_generator(
             triplet_list.append(triplet)
             triplet_idx += 1
 
+    diffs = torch.tensor(diffs)
+    print(f"rel diff avg: {diffs.mean()} std: {diffs.std()} min: {diffs.min()} max: {diffs.max()}")
+
     return triplet_list
 
 
@@ -185,6 +190,7 @@ def preprocess_activitynet(anno_path, feat_path, feat_type):
         video_ids, vid2seqembs = [], {}
         sbert = SentenceTransformer("all-MiniLM-L6-v2")
 
+        missing = 0
         if os.path.exists("ac_video_ids.pt") and os.path.exists("ac_vid2seqembs.pt"):
             video_ids = torch.load("ac_video_ids.pt")
             vid2seqembs = torch.load("ac_vid2seqembs.pt")
@@ -193,12 +199,17 @@ def preprocess_activitynet(anno_path, feat_path, feat_type):
                 with open(os.path.join(anno_path, anno_file), "r") as f:
                     anno = json.load(f)
                     for vid, data in tqdm(anno.items(), desc=f"[ActivityNet] preprocessing ({anno_file[:-5]})"):
+                        if not os.path.exists(os.path.join(feat_path, f"{vid}.npy")):
+                            missing += 1
+                            continue
                         with torch.no_grad():
                             caption_embs = sbert.encode(data["sentences"]) # n x d
                         vid2seqembs[vid] = caption_embs
                         video_ids.append(vid)
             torch.save(video_ids, "ac_video_ids.pt")
             torch.save(vid2seqembs, "ac_vid2seqembs.pt")
+
+        print(f"mising: {missing} avail: {len(video_ids)}")
         
         feats = [np.load(os.path.join(feat_path, f"{vid}.npy")) for vid in video_ids]
         feats = np.stack(feats, axis=0)
@@ -228,6 +239,7 @@ def activitynet_triplet_generator(
     sampled_idx = random.sample(range(len(video_ids)), n_sample)
     distance, knn_idx = index.search(feats[sampled_idx,:], topk)
 
+    diffs = []
     for i, qidx in enumerate(tqdm(sampled_idx, desc="[ActivityNet] generate triplets")):
         while True:
             j, k = random.sample(range(1, topk), 2)
@@ -242,6 +254,7 @@ def activitynet_triplet_generator(
             rel2 = compute_dtw_score(query_video, video2, 0, 0)
 
             if abs(rel1 - rel2) > threshold:
+                diffs.append(abs(rel1 - rel2))
                 break
 
         global triplet_idx
@@ -261,6 +274,9 @@ def activitynet_triplet_generator(
 
         triplet_list.append(triplet)
         triplet_idx += 1
+
+    diffs = torch.tensor(diffs)
+    print(f"rel diff avg: {diffs.mean()} std: {diffs.std()} min: {diffs.min()} max: {diffs.max()}")
     
     return triplet_list
 

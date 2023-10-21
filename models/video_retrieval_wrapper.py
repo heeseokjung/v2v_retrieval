@@ -13,6 +13,7 @@ from utils.similarity import (
 )
 
 from utils.loss import compute_mse_loss
+from tslearn.metrics import SoftDTWLossPyTorch
 from utils.metric import nDCGMetric
 from utils.metric import MSEError
 
@@ -35,6 +36,8 @@ class VideoRetrievalWrapper(pl.LightningModule):
         self.mse_error = MSEError()
 
         self.id2cembs_train = torch.load("dataset/anno/moma/id2cembs_train.pt")
+
+        self.soft_dtw_loss = SoftDTWLossPyTorch(gamma=0.1)
     
     def forward(self, data):
         if self.cfg.MODEL.VIDEO.name == "slot":
@@ -68,6 +71,9 @@ class VideoRetrievalWrapper(pl.LightningModule):
             for video in pair_videos:
                 emb = self(video)
                 pair_video_embs.append(emb)
+
+            anchor_video_embs = torch.stack(anchor_video_embs, dim=0)
+            pair_video_embs = torch.stack(pair_video_embs, dim=0)
 
             pred, vt_align_loss, cov = [], [], []
             for anchor_vid, anchor_emb, pair_vid, pair_emb in zip(
@@ -108,7 +114,10 @@ class VideoRetrievalWrapper(pl.LightningModule):
             # video-text align loss
             vt_align_loss = torch.stack(vt_align_loss).mean()
 
-            loss = mse_loss + 0.05*cov_reg + 0.1*vt_align_loss
+            # soft-DTW loss
+            soft_dtw_loss = self.soft_dtw_loss(anchor_video_embs, pair_video_embs).mean()
+
+            loss = mse_loss + 0.05*cov_reg + 0.1*vt_align_loss + 0.0001 * soft_dtw_loss
             
             # vt_algin_loss = -1. * F.relu(torch.stack(vt_algin_loss).mean())
             # mse_loss = compute_mse_loss(pred, relevance_scores)
@@ -145,6 +154,15 @@ class VideoRetrievalWrapper(pl.LightningModule):
             self.log(
                 "train/cov_reg",
                 0.05*cov_reg,
+                on_step=True,
+                prog_bar=True,
+                logger=True,
+                sync_dist=True,
+            )
+
+            self.log(
+                "train/soft_dtw",
+                0.0001*soft_dtw_loss,
                 on_step=True,
                 prog_bar=True,
                 logger=True,
