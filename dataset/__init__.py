@@ -14,17 +14,17 @@ class MOMACollator(object):
     def __call__(self, data_list):
         if self.is_train:
             anchor_video_ids, pair_video_ids = [], []
-            anchor_activity_names, pair_activity_names = [], []
+            anchor_cnames, pair_cnames = [], []
             anchor_videos, pair_videos = [], []
             sm_l = []
             
             for anchor, pair, sm in data_list:
                 anchor_video_ids.append(anchor["video_id"])
-                anchor_activity_names.append(anchor["activity_name"])
+                anchor_cnames.append(anchor["cname"])
                 anchor_videos.append(anchor["video"])
                 
                 pair_video_ids.append(pair["video_id"])
-                pair_activity_names.append(pair["activity_name"])
+                pair_cnames.append(pair["cname"])
                 pair_videos.append(pair["video"])
 
                 sm_l.append(sm)
@@ -35,10 +35,10 @@ class MOMACollator(object):
 
             batch = {
                 "anchor_video_ids": anchor_video_ids,
-                "anchor_activity_names": anchor_activity_names,
+                "anchor_cnames": anchor_cnames,
                 "anchor_videos": anchor_videos, 
                 "pair_video_ids": pair_video_ids,
-                "pair_activity_names": pair_activity_names,
+                "pair_cnames": pair_cnames,
                 "pair_videos": pair_videos,
                 "sm": torch.stack(sm_l),
             }

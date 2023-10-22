@@ -18,12 +18,12 @@ DATASET:
 MODEL:
   LOAD_FROM: ""
   VIDEO:
-    name: "slot" 
+    name: "s3d" 
     S3D:
       projector:
         in_dim: 1024
         hidden_dim: 512
-        out_dim: 256
+        out_dim: 384
         dropout: 0.1
       use_kinetics_pretrained: True
       freeze: True
@@ -34,7 +34,7 @@ MODEL:
       projector:
         in_dim: 768
         hidden_dim: 384
-        out_dim: 256
+        out_dim: 384
         dropout: 0.1
       num_frames: 4
       time_init: "zeors"

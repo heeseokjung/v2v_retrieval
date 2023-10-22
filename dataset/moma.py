@@ -45,9 +45,9 @@ class MOMARetrievalEvalDataset(MOMARetrievalBaseDataset):
         for i, query in enumerate(self.anno):
             batch = {
                 "query_video_id": query["video_id"], # video id e.g. '-49z-lj8eYQ'
-                "query_activity_name": query["activity_name"], # activity name e.g. "basketball game"
+                "query_cname": query["cname"], # activity name e.g. "basketball game"
                 "ref_video_ids": [x["video_id"] for x in self.anno if query["video_id"] != x["video_id"]],
-                "ref_activity_names": [x["activity_name"] for x in self.anno if query["video_id"] != x["video_id"]],
+                "ref_cnames": [x["cname"] for x in self.anno if query["video_id"] != x["video_id"]],
             }
 
             sm = torch.cat([self.sm[i][:i], self.sm[i][i+1:]])

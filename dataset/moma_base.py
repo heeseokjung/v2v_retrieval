@@ -27,7 +27,6 @@ class MOMARetrievalBaseDataset(Dataset):
         self.split = split
 
         self._load_anno_data(split)
-        self._load_caption_emb()
         self._set_pairwise_similarity()
 
         self.graph_cache = {}
@@ -39,12 +38,12 @@ class MOMARetrievalBaseDataset(Dataset):
 
     def _set_pairwise_similarity(self):
         type = self.cfg.RELEVANCE.type
-        if os.path.exists(f"anno/moma/sm_{type}.pt"):
+        if os.path.exists(f"anno/moma/sm_{type}_{self.split}.pt"):
             print(f"Load from pre-computed surrogate measure [{type}]")
-            self.sm = torch.load(f"anno/moma/sm_{type}.pt")
+            self.sm = torch.load(f"anno/moma/sm_{type}_{self.split}.pt")
         else:
             self.sm = torch.zeros(len(self.anno), len(self.anno))
-            check = np.zeros((len(self.anno), len(self.anno))).bool()
+            check = np.zeros((len(self.anno), len(self.anno))).astype(bool)
             for i in tqdm(range(len(self.anno)), desc=f"Compute pair-wise surrogate measure [{type}]"):
                 for j in range(len(self.anno)):
                     if check[j][i]:
@@ -72,7 +71,7 @@ class MOMARetrievalBaseDataset(Dataset):
                     else:
                         raise NotImplementedError
                     
-            torch.save(self.sm, f"anno/moma/sm_{type}.pt")
+            torch.save(self.sm, f"anno/moma/sm_{type}_{self.split}.pt")
                 
     def transform_s3d(self, snippet):
         ''' stack & noralization '''

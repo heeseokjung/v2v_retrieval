@@ -35,7 +35,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
         self.ndcg_metric = nDCGMetric([5, 10, 20, 40])
         self.mse_error = MSEError()
 
-        self.id2cembs_train = torch.load("dataset/anno/moma/id2cembs_train.pt")
+        self.id2cemb = torch.load("anno/moma/id2cemb.pt")
 
         self.soft_dtw_loss = SoftDTWLossPyTorch(gamma=0.1)
     
@@ -50,11 +50,11 @@ class VideoRetrievalWrapper(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         anchor_video_ids = batch["anchor_video_ids"]
-        # anchor_activity_names = batch["anchor_activity_names"] # dataset dependent field
+        # anchor_cnames = batch["anchor_cnames"] # dataset dependent field
         anchor_videos = batch["anchor_videos"]
         
         pair_video_ids = batch["pair_video_ids"]
-        # pair_activity_names = batch["pair_activity_names"] # dataset dependent field
+        # pair_cnames = batch["pair_cnames"] # dataset dependent field
         pair_videos = batch["pair_videos"]
         
         sm = batch["sm"]
@@ -88,10 +88,10 @@ class VideoRetrievalWrapper(pl.LightningModule):
                 # for Smooth-Chamfer loss (L2)
                 alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
                 vt_align_loss.append(
-                    -1. * smooth_chamfer_train(anchor_emb, self.id2cembs_train[anchor_vid].to("cuda"), alpha)
+                    -1. * smooth_chamfer_train(anchor_emb, self.id2cemb[anchor_vid].to("cuda"), alpha)
                 )
                 vt_align_loss.append(
-                    -1. * smooth_chamfer_train(pair_emb, self.id2cembs_train[pair_vid].to("cuda"), alpha)
+                    -1. * smooth_chamfer_train(pair_emb, self.id2cemb[pair_vid].to("cuda"), alpha)
                 )
 
                 # for covariance regularizer
@@ -190,11 +190,11 @@ class VideoRetrievalWrapper(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         query_video_id = batch["query_video_id"]
-        # query_activity_name = batch["query_activity_name"] # dataset dependent field
+        # query_cname = batch["query_cname"] # dataset dependent field
         query_video = batch["query_video"]
 
         ref_video_ids = batch["ref_video_ids"]
-        # ref_activity_names = batch["ref_activity_names"] # dataset dependent field
+        # ref_cnames = batch["ref_cnames"] # dataset dependent field
         if "ref_videos" in batch:
             ref_videos = batch["ref_videos"]
 
