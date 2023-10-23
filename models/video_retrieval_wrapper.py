@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+import matplotlib.pyplot as plt
 
 from utils.similarity import (
     compute_cosine_mean_similarity,
@@ -16,6 +17,75 @@ from utils.loss import compute_mse_loss
 from tslearn.metrics import SoftDTWLossPyTorch
 from utils.metric import nDCGMetric
 from utils.metric import MSEError
+
+
+def compute_ndcg_single(pred, sm):
+    topk = [5, 10, 20, 40]
+    _, pred_idx = torch.topk(pred, max(topk))
+    _, opt_idx = torch.topk(sm, max(topk))
+
+    sm = (sm - 0.2) / 0.2
+
+    scores = {}
+    for k in topk:
+        pred_rel = sm[pred_idx[:k]]
+        opt_rel = sm[opt_idx[:k]]
+        dcg = ((2**pred_rel - 1) / torch.log2(torch.arange(2, k+2)).to("cuda")).sum()
+        idcg = ((2**opt_rel - 1) / torch.log2(torch.arange(2, k+2)).to("cuda")).sum()
+        scores[f"nDCG@{k}"] = dcg / idcg
+
+    return scores
+
+
+def compute_mse_single(pred, sm):
+    diff = pred - sm
+    return (diff ** 2).mean()
+
+
+def visualize_result(
+        path,
+        model, 
+        pred,
+        sm, 
+        src_vid,
+        src_activity_name,
+        ref_activity_names, 
+        topk=None
+    ):
+
+    ndcg = compute_ndcg_single(pred, sm)
+    mse = compute_mse_single(pred, sm)
+
+    if topk is not None:
+        pred = pred[:topk]
+        sm = sm[:topk]
+        ref_activity_names[:topk]
+
+    _, sorted_idx = torch.sort(sm, descending=True)
+    sm_y = sm[sorted_idx].detach().cpu().numpy()
+    pred_y = pred[sorted_idx].detach().cpu().numpy()
+    x_label = [ref_activity_names[idx] for idx in sorted_idx]
+
+    plt.figure(figsize=(30, 5))
+    plt.title((
+        f"{src_vid} [{src_activity_name}] "
+        f"nDCG@5: {ndcg['nDCG@5']} "
+        f"nDCG@10: {ndcg['nDCG@10']} "
+        f"nDCG@20: {ndcg['nDCG@20']} "
+        f"nDCG@40: {ndcg['nDCG@40']} "
+        f"mse: {mse}"
+    ))
+    plt.xticks(np.arange(len(x_label)), label=x_label, rotation=90)
+    plt.gca().set_xticklabels(x_label)
+    plt.xlim([0, len(ref_activity_names)])
+    plt.ylim([-0.1, 1.1])
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.plot(np.arange(len(sm)), sm_y, color="red")
+    plt.plot(np.arange(len(pred)), pred_y, color="black")
+    plt.savefig(os.path.join(path, model,  f"{src_vid}.png"))
+    plt.close()
 
 
 class VideoRetrievalWrapper(pl.LightningModule):
@@ -31,6 +101,8 @@ class VideoRetrievalWrapper(pl.LightningModule):
         self.id2emb = {}
         self.eval_query_vids = []
         self.eval_ref_vids = []
+        self.eval_query_cnames = []
+        self.eval_ref_cnames = []
         self.eval_sm_l = []
         self.ndcg_metric = nDCGMetric([5, 10, 20, 40])
         self.mse_error = MSEError()
@@ -86,36 +158,37 @@ class VideoRetrievalWrapper(pl.LightningModule):
                     pred.append(compute_cosine_mean_similarity(anchor_emb, pair_emb))
 
                 # for Smooth-Chamfer loss (L2)
-                alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
-                vt_align_loss.append(
-                    -1. * smooth_chamfer_train(anchor_emb, self.id2cemb[anchor_vid].to("cuda"), alpha)
-                )
-                vt_align_loss.append(
-                    -1. * smooth_chamfer_train(pair_emb, self.id2cemb[pair_vid].to("cuda"), alpha)
-                )
+                # alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
+                # vt_align_loss.append(
+                #     -1. * smooth_chamfer_train(anchor_emb, self.id2cemb[anchor_vid].to("cuda"), alpha)
+                # )
+                # vt_align_loss.append(
+                #     -1. * smooth_chamfer_train(pair_emb, self.id2cemb[pair_vid].to("cuda"), alpha)
+                # )
 
                 # for covariance regularizer
-                anchor_emb = F.normalize(anchor_emb, dim=-1)
-                cov.append(torch.mm(anchor_emb, anchor_emb.t()))
-                pair_emb = F.normalize(pair_emb, dim=-1)
-                cov.append(torch.mm(pair_emb, pair_emb.t()))
+                # anchor_emb = F.normalize(anchor_emb, dim=-1)
+                # cov.append(torch.mm(anchor_emb, anchor_emb.t()))
+                # pair_emb = F.normalize(pair_emb, dim=-1)
+                # cov.append(torch.mm(pair_emb, pair_emb.t()))
 
             # predict surrogate measure (L1)
             pred = torch.stack(pred)
             mse_loss = compute_mse_loss(pred, sm)
 
             # variance regularizer (L3)
-            cov = torch.stack(cov, dim=0) # b x k x k
-            target_var = torch.eye(cov.shape[1]).unsqueeze(dim=0).expand(cov.shape[0], cov.shape[1], cov.shape[2]).to(cov.device)
-            cov_reg = compute_mse_loss(cov, target_var)
+            # cov = torch.stack(cov, dim=0) # b x k x k
+            # target_var = torch.eye(cov.shape[1]).unsqueeze(dim=0).expand(cov.shape[0], cov.shape[1], cov.shape[2]).to(cov.device)
+            # cov_reg = compute_mse_loss(cov, target_var)
 
             # video-text align loss
-            vt_align_loss = torch.stack(vt_align_loss).mean()
+            # vt_align_loss = torch.stack(vt_align_loss).mean()
 
             # soft-DTW loss
-            soft_dtw_loss = self.soft_dtw_loss(anchor_video_embs, pair_video_embs).mean()
+            # soft_dtw_loss = self.soft_dtw_loss(anchor_video_embs, pair_video_embs).mean()
 
-            loss = mse_loss + 0.05*cov_reg + 0.1*vt_align_loss + 0.0001 * soft_dtw_loss
+            # loss = mse_loss + 0.5*cov_reg + 0.05*vt_align_loss + 0.0001*soft_dtw_loss
+            loss = mse_loss
             
             # vt_algin_loss = -1. * F.relu(torch.stack(vt_algin_loss).mean())
             # mse_loss = compute_mse_loss(pred, relevance_scores)
@@ -131,41 +204,41 @@ class VideoRetrievalWrapper(pl.LightningModule):
                 sync_dist=True,
             ) 
 
-            self.log(
-                "train/mse_loss",
-                mse_loss,
-                on_step=True,
-                prog_bar=True,
-                logger=True,
-                sync_dist=True,
-            )
+            # self.log(
+            #     "train/mse_loss",
+            #     mse_loss,
+            #     on_step=True,
+            #     prog_bar=True,
+            #     logger=True,
+            #     sync_dist=True,
+            # )
 
-            self.log(
-                "train/vt_align_loss",
-                0.1*vt_align_loss,
-                on_step=True,
-                prog_bar=True,
-                logger=True,
-                sync_dist=True,
-            )
+            # self.log(
+            #     "train/vt_align_loss",
+            #     0.05*vt_align_loss,
+            #     on_step=True,
+            #     prog_bar=True,
+            #     logger=True,
+            #     sync_dist=True,
+            # )
 
-            self.log(
-                "train/cov_reg",
-                0.05*cov_reg,
-                on_step=True,
-                prog_bar=True,
-                logger=True,
-                sync_dist=True,
-            )
+            # self.log(
+            #     "train/cov_reg",
+            #     0.5*cov_reg,
+            #     on_step=True,
+            #     prog_bar=True,
+            #     logger=True,
+            #     sync_dist=True,
+            # )
 
-            self.log(
-                "train/soft_dtw",
-                0.0001*soft_dtw_loss,
-                on_step=True,
-                prog_bar=True,
-                logger=True,
-                sync_dist=True,
-            )
+            # self.log(
+            #     "train/soft_dtw",
+            #     0.0001*soft_dtw_loss,
+            #     on_step=True,
+            #     prog_bar=True,
+            #     logger=True,
+            #     sync_dist=True,
+            # )
         else:
            anchor_video_embs = self(anchor_videos)
            pair_video_embs = self(pair_videos)
@@ -190,11 +263,11 @@ class VideoRetrievalWrapper(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         query_video_id = batch["query_video_id"]
-        # query_cname = batch["query_cname"] # dataset dependent field
+        query_cname = batch["query_cname"] # dataset dependent field
         query_video = batch["query_video"]
 
         ref_video_ids = batch["ref_video_ids"]
-        # ref_cnames = batch["ref_cnames"] # dataset dependent field
+        ref_cnames = batch["ref_cnames"] # dataset dependent field
         if "ref_videos" in batch:
             ref_videos = batch["ref_videos"]
 
@@ -203,6 +276,8 @@ class VideoRetrievalWrapper(pl.LightningModule):
         if self.cfg.MODEL.VIDEO.name == "slot":
             self.eval_query_vids.append(query_video_id)
             self.eval_ref_vids.append(ref_video_ids)
+            self.eval_query_cnames.append(query_cname)
+            self.eval_ref_cnames.append(ref_cnames)
             self.eval_sm_l.append(sm)
             query_video_emb = self.val_shared_step(query_video_id, query_video)  
         else:
@@ -218,11 +293,26 @@ class VideoRetrievalWrapper(pl.LightningModule):
 
             self.ndcg_metric.update(pred, sm)
             self.mse_error.update(pred, sm)
+
+            if False:
+                visualize_result(
+                    path="/root/visualize_results/",
+                    model=self.cfg.MODEL.VIDEO.name,
+                    pred=pred,
+                    sm=sm,
+                    src_vid=query_video_id,
+                    src_activity_name=query_cname,
+                    ref_activity_names=ref_cnames,
+                )
         
     def validation_epoch_end(self, validation_step_outputs):
         if self.cfg.MODEL.VIDEO.name == "slot":
-            for query_vid, ref_vids, sm in zip(
-                self.eval_query_vids, self.eval_ref_vids, self.eval_sm_l
+            for query_vid, ref_vids, query_cname, ref_cnames, sm in zip(
+                self.eval_query_vids, 
+                self.eval_ref_vids, 
+                self.eval_query_cnames, 
+                self.eval_ref_cnames, 
+                self.eval_sm_l
             ):
                 pred = []
                 query_video_emb = self.id2emb[query_vid]
@@ -239,6 +329,17 @@ class VideoRetrievalWrapper(pl.LightningModule):
 
                 self.ndcg_metric.update(pred, sm)
                 self.mse_error.update(pred, sm)
+
+                if False:
+                    visualize_result(
+                        path="/root/visualize_results",
+                        model=self.cfg.MODEL.VIDEO.name,
+                        pred=pred,
+                        sm=sm,
+                        src_vid=query_vid,
+                        src_activity_name=query_cname,
+                        ref_activity_names=ref_cnames,
+                    )
 
         score = self.ndcg_metric.compute()
         score["mse_error"] = self.mse_error.compute()
@@ -259,6 +360,8 @@ class VideoRetrievalWrapper(pl.LightningModule):
         self.id2emb = {}
         self.eval_query_vids = []
         self.eval_ref_vids = []
+        self.eval_query_cnames = []
+        self.eval_ref_cnames = []
         self.eval_sm_l = []
         self.ndcg_metric.reset()
         self.mse_error.reset()

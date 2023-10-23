@@ -18,7 +18,7 @@ DATASET:
 MODEL:
   LOAD_FROM: ""
   VIDEO:
-    name: "s3d" 
+    name: "slot" 
     S3D:
       projector:
         in_dim: 1024
