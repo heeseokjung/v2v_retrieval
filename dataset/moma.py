@@ -9,26 +9,28 @@ class MOMARetrievalTrainDataset(MOMARetrievalBaseDataset):
         super().__init__(cfg, "train")
         
     def sample_pair(self, idx):
-        scores = self.sm[idx]
-        _, sorted_idx = torch.sort(scores, descending=True)
-        sorted_idx = sorted_idx[1:] # exclude self
+        similarties = self.sm[idx]
+        _, sorted_idx = torch.sort(similarties, descending=True)
+        mask = (sorted_idx != idx)
+        sorted_idx = sorted_idx[mask]
         
+        # oversampling
         if self.args.use_over_sampling and np.random.rand(1) < 0.5:
             pair_idx = sorted_idx[np.random.randint(self.args.tail_range)]
         else:
             pair_idx = sorted_idx[np.random.randint(len(sorted_idx))]
-            
-        return pair_idx, scores[pair_idx]
+
+        return pair_idx, similarties[pair_idx]
         
     def __getitem__(self, idx):
-        anchor_anno = copy.deepcopy(self.anno[idx])
-        anchor_anno["video"] = self.load_video(anchor_anno["video_id"])
+        anchor = copy.deepcopy(self.anno[idx])
+        anchor["video"] = self.load_video(anchor["video_id"])
         
-        pair_idx, score = self.sample_pair(idx)
-        pair_anno = copy.deepcopy(self.anno[pair_idx])
-        pair_anno["video"] = self.load_video(pair_anno["video_id"])
+        pair_idx, similarity = self.sample_pair(idx)
+        pair = copy.deepcopy(self.anno[pair_idx])
+        pair["video"] = self.load_video(pair["video_id"])
         
-        return anchor_anno, pair_anno, score
+        return anchor, pair, similarity
         
         
 class MOMARetrievalEvalDataset(MOMARetrievalBaseDataset):
@@ -46,13 +48,13 @@ class MOMARetrievalEvalDataset(MOMARetrievalBaseDataset):
             batch = {
                 "query_video_id": query["video_id"], # video id e.g. '-49z-lj8eYQ'
                 "query_cname": query["cname"], # activity name e.g. "basketball game"
-                "ref_video_ids": [x["video_id"] for x in self.anno if query["video_id"] != x["video_id"]],
-                "ref_cnames": [x["cname"] for x in self.anno if query["video_id"] != x["video_id"]],
+                "trg_video_ids": [x["video_id"] for x in self.anno if query["video_id"] != x["video_id"]],
+                "trg_cnames": [x["cname"] for x in self.anno if query["video_id"] != x["video_id"]],
             }
 
-            sm = torch.cat([self.sm[i][:i], self.sm[i][i+1:]])
-            # relevance_scores = torch.clamp(relevance_scores, min=0.)
-            batch["sm"] = sm
+            similarities = torch.cat([self.sm[i][:i], self.sm[i][i+1:]])
+            similarities = torch.clamp(similarities, min=0.)
+            batch["similarities"] = similarities
             
             self.batches.append(batch)
 
@@ -61,10 +63,8 @@ class MOMARetrievalEvalDataset(MOMARetrievalBaseDataset):
         
         query_video = self.load_video(batch["query_video_id"])
         batch["query_video"] = query_video
-
-        if self.cfg.MODEL.VIDEO.name != "slot":
-            ref_videos = [self.load_video(ref_vid) for ref_vid in batch["ref_video_ids"]]
-            ref_videos = torch.stack(ref_videos, dim=0) # only when use pre-extracted features
-            batch["ref_videos"] = ref_videos
+        
+        trg_videos = [self.load_video(vid) for vid in batch["trg_video_ids"]]
+        batch["trg_videos"] = trg_videos
         
         return batch

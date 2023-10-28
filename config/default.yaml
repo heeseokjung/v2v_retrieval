@@ -15,47 +15,54 @@ DATASET:
     use_over_sampling: True
 MODEL:
   LOAD_FROM: "ours"
-  VIDEO:
-    name: "slot" 
-    S3D:
-      projector:
-        in_dim: 1024
-        hidden_dim: 512
-        out_dim: 384
-        dropout: 0.1
-      use_kinetics_pretrained: True
-      freeze: True
-      clip_duration: 8
-      frames_per_clip: 64
-      stride: 2
-    FROZEN:
-      projector:
-        in_dim: 768
-        hidden_dim: 384
-        out_dim: 384
-        dropout: 0.1
-      num_frames: 4
-      time_init: "zeors"
-      attention_style: "frozen-in-time"
-      emb_type: "set" # "flat" or "set"
-      use_cc_web_pretrained: True
-      freeze: True
-      clip_duration: 8
-    TRANSFORMER:
+  name: "slot" 
+  S3D:
+    projector:
+      in_dim: 1024
+      hidden_dim: 512
+      out_dim: 384
+      dropout: 0.1
+    use_kinetics_pretrained: True
+    freeze: True
+    clip_duration: 8
+    frames_per_clip: 64
+    stride: 2
+  FROZEN:
+    projector:
+      in_dim: 768
+      hidden_dim: 384
+      out_dim: 384
+      dropout: 0.1
+    num_frames: 4
+    time_init: "zeors"
+    attention_style: "frozen-in-time"
+    emb_type: "set" # "flat" or "set"
+    use_cc_web_pretrained: True
+    freeze: True
+    clip_duration: 8
+  TRANSFORMER:
+    in_dim: 768
+    d_model: 768
+    max_len: 700
+    nhead: 8
+    dim_feedforward: 1024
+    dropout: 0.1
+    num_layers: 2
+  SLOT: 
+    slot:
+      num_slots: 8
+      dim: 768
+      iters: 3
+      eps: 1e-8
+      hidden_dim: 768
+    encoder:
       in_dim: 768
       d_model: 768
+      max_len: 700
       nhead: 8
       dim_feedforward: 1024
       dropout: 0.1
       num_layers: 2
-  SLOT: 
-    input_size: 768
-    slot_size: 256
-    mlp_hidden_size: 256
-    init_type: "gaussian"
-    num_slots: 8
-    num_iterations: 3
-    epsilon: 0.00001
 TRAIN:
   dataset: "moma"
   optimizer: "adam"
@@ -65,6 +72,8 @@ TRAIN:
   persistent_workers: False
   num_epochs: 400
   lr: 0.00001
+  loss:
+    gamma: 0.05
 EVAL:
   split: "val"
   dataset: "moma"

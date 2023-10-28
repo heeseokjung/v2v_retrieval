@@ -96,132 +96,79 @@ def visualize_result(
 
 
 class VideoRetrievalWrapper(pl.LightningModule):
-    def __init__(self, cfg, video_encoder, slot_encoder):
+    def __init__(self, cfg, video_encoder):
         super().__init__()
         
         self.cfg = cfg
-        
         self.video_encoder = video_encoder
-        self.slot_encoder = slot_encoder
-        # self.slot_decoder = nn.Linear(cfg.MODEL.SLOT.slot_size, 768)
-        self.layer_norm = nn.LayerNorm(cfg.MODEL.SLOT.slot_size)
+
+        # loss functions
+        self.mse_loss = nn.MSELoss(reduction="mean")
+        self.sdtw_loss = SoftDTWLossPyTorch(gamma=0.1, normalize=True, cdist=cdist)
         
-        self.id2emb = {}
-        self.eval_query_vids = []
-        self.eval_ref_vids = []
-        self.eval_query_cnames = []
-        self.eval_ref_cnames = []
-        self.eval_sm_l = []
+        # used in eval step
+        self.id2vemb = {}
         self.ndcg_metric = nDCGMetric([5, 10, 20, 40])
         self.mse_error = MSEError()
 
+        # tmp for smooth-chamfer
         self.id2cemb = torch.load("anno/moma/id2cemb.pt")
-
-        self.sdtw = SoftDTWLossPyTorch(gamma=0.1, normalize=True, dist_func=cdist)
-        # self.clinear = nn.Sequential(
-        #     nn.Linear(384, 512),
-        #     nn.GELU(),
-        #     nn.Dropout(p=0.1),
-        #     nn.Linear(512, 384),
-        # )
-
-        self.count = 0
     
-    def forward(self, data):
-        if self.cfg.MODEL.VIDEO.name == "slot":
-            # data: n_clips x d (CLS 토큰들의 시퀀스)
-            # x = self.video_encoder(data) # 트랜스포머 인코더 한번 태우는거
-            slots = self.slot_encoder(data) # n_slot x d
-            # out = self.slot_decoder(slots)
-            # return x, out
-            return slots
+    def forward(self, x, pad_mask):
+        if self.cfg.MODEL.VIDEO.name == "ours":
+            return self.video_encoder(x, pad_mask) # b x k x d
         else:
-            return self.video_encoder(data) # b x d
+            return self.video_encoder(x) # b x d
     
     def training_step(self, batch, batch_idx):
+        # get anchor data
         anchor_video_ids = batch["anchor_video_ids"]
-        # anchor_cnames = batch["anchor_cnames"] # dataset dependent field
+        anchor_cnames = batch["anchor_cnames"] 
         anchor_videos = batch["anchor_videos"]
+        if "anchor_pad_mask" in batch:
+            anchor_pad_mask = batch["anchor_pad_mask"]
         
+        # get pair data
         pair_video_ids = batch["pair_video_ids"]
-        # pair_cnames = batch["pair_cnames"] # dataset dependent field
+        pair_cnames = batch["pair_cnames"] 
         pair_videos = batch["pair_videos"]
+        if "pair_pad_mask" in batch:
+            pair_pad_mask = batch["anchor_pad_mask"]
         
-        sm = batch["sm"]
+        # semantic similarities (surrogate measure)
+        similarities = batch["similarities"]
 
-        if self.cfg.MODEL.VIDEO.name == "slot":
-            # smooth-chamfer loss
-            sc_loss = []
-            alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
+        if self.cfg.MODEL.VIDEO.name == "ours": # proposed
+            anchor_embs = self(anchor_videos) # b x k x d
+            pair_embs = self(pair_videos) # b x k x d
 
-            anchor_video_embs = []
-            for video in anchor_videos:
-                x, emb = self(video)
-                anchor_video_embs.append(emb)
-                sc_loss.append(
-                    -1. * compute_smooth_chamfer_similarity(emb, x, alpha)
-                )
+            if self.cfg.RELEVANCE.type == "cosine":
+                anchor_embs = F.normalize(anchor_embs, dim=-1)
+                pair_embs = F.normalize(pair_embs, dim=-1)
+                pred_sim = torch.bmm(anchor_embs, pair_embs.transpose(1, 2)) # b x k x k
+                pred = pred_sim.mean(dim=(1, 2)) # b,
+            elif self.cfg.RELEVANCE.type == "dtw":
+                k = anchor_embs.shape[1]
+                pred = 1. - (self.sdtw_loss(anchor_embs, pair_embs) / 2*k) 
+            else:
+                raise NotImplementedError
+            
+            # surrogate predict loss
+            sm_loss = self.mse_loss(pred, similarities)
 
-            pair_video_embs = []
-            for video in pair_videos:
-                x, emb = self(video)
-                pair_video_embs.append(emb)
-                sc_loss.append(
-                    -1. * compute_smooth_chamfer_similarity(emb, x, alpha)
-                )
+            # smooth-chamfer similarity loss
+            # sc_loss = []
+            # alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
+            # for vid, emb in zip(anchor_video_ids, anchor_embs):
+            #     sc_loss.append(-1. * compute_smooth_chamfer_similarity(emb, self.id2cemb[vid], alpha))
+            # for vid, emb in zip(pair_video_ids, pair_embs):
+            #     sc_loss.append(-1. * compute_smooth_chamfer_similarity(emb, self.id2cemb[vid], alpha))
+            # sc_loss = torch.stack(sc_loss)
 
-            anchor_video_embs = torch.stack(anchor_video_embs, dim=0) # b x k x d
-            pair_video_embs = torch.stack(pair_video_embs, dim=0) # b x k x d
- 
-            pred, cov = [], []
-            for anchor_vid, anchor_emb, pair_vid, pair_emb in zip(
-                anchor_video_ids, anchor_video_embs, pair_video_ids, pair_video_embs,
-            ):
-                if self.cfg.RELEVANCE.type == "mean":
-                    pred.append(compute_cosine_mean_similarity(anchor_emb, pair_emb))
-                elif self.cfg.RELEVANCE.type == "smooth-chamfer":
-                    alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
-                    pred.append(compute_smooth_chamfer_similarity(anchor_emb, pair_emb, alpha))
-                elif self.cfg.RELEVANCE.type == "dtw":
-                    # pred.append(compute_cosine_mean_similarity(anchor_emb, pair_emb))
-                    # pred.append(1. - (self.sdtw(anchor_emb, pair_emb) / (anchor_emb.shape[1] + pair_emb.shape[1])))
-                    ...
-
-                # for Smooth-Chamfer loss (L2)
-                # alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
-                # vt_align_loss.append(
-                #     -1. * smooth_chamfer_train(anchor_emb, self.clinear(self.id2cemb[anchor_vid].to("cuda")), alpha)
-                # )
-                # vt_align_loss.append(
-                #     -1. * smooth_chamfer_train(pair_emb, self.clinear(self.id2cemb[pair_vid].to("cuda")), alpha)
-                # )
-
-                # for orthogonality regularizer
-                # anchor_emb = F.normalize(anchor_emb, dim=-1)
-                # cov.append(torch.mm(anchor_emb, anchor_emb.t()))
-                # pair_emb = F.normalize(pair_emb, dim=-1)
-                # cov.append(torch.mm(pair_emb, pair_emb.t()))
-
-            # predict surrogate measure (L1)
-            # pred = torch.stack(pred)
-            pred = 1. - (self.sdtw(anchor_video_embs, pair_video_embs) / (anchor_video_embs.shape[1] + pair_video_embs.shape[1]))
-            mse_loss = compute_mse_loss(pred, sm)
-
-            # orthogonality regularizer (L3)
-            # cov = torch.stack(cov, dim=0) # b x k x k
-            # target_var = torch.eye(cov.shape[1]).unsqueeze(dim=0).expand(cov.shape[0], cov.shape[1], cov.shape[2]).to(cov.device)
-            # ortho_reg = compute_mse_loss(cov, target_var)
-
-            # video-text align loss
-            # vt_align_loss = torch.stack(vt_align_loss).mean()
-
-            # smooth-chamfer loss
-            sc_loss = torch.stack(sc_loss).mean()
-
-            loss = mse_loss + 0.1*sc_loss
-            # loss = mse_loss + 0.01*ortho_reg + 0.1*sc_loss 
-            # loss = mse_loss + 0.01*cov_reg + 0.05*vt_align_loss 
-            # loss = mse_loss
+            # total loss
+            gamma = self.cfg.TRAIN.loss.gamma
+            loss = sm_loss
+            # loss = sm_loss + gamma*sc_loss
 
             self.log(
                 "train/loss",
@@ -233,146 +180,91 @@ class VideoRetrievalWrapper(pl.LightningModule):
             ) 
 
             self.log(
-                "train/mse_loss",
-                mse_loss,
+                "train/sm_loss",
+                sm_loss,
                 on_step=True,
                 prog_bar=True,
                 logger=True,
                 sync_dist=True,
-            )
+            ) 
 
             # self.log(
-            #     "train/vt_align_loss",
-            #     0.05*vt_align_loss,
+            #     "train/sc_loss",
+            #     sc_loss,
             #     on_step=True,
             #     prog_bar=True,
             #     logger=True,
             #     sync_dist=True,
-            # )
-            self.log(
-                "train/sc_loss",
-                0.05*sc_loss,
+            # ) 
+        else: # baseline
+           anchor_embs = self(anchor_videos) # b x d
+           pair_embs = self(pair_videos) # b x d
+
+           anchor_embs = F.normalize(anchor_embs, dim=-1) 
+           pair_embs = F.normalize(pair_embs, dim=-1) 
+           pred = torch.mm(anchor_embs, pair_embs.t()).diagonal() # b,
+
+           loss = self.mse_loss(pred, similarities)
+
+           self.log(
+                "train/loss",
+                loss,
                 on_step=True,
                 prog_bar=True,
                 logger=True,
                 sync_dist=True,
-            )
-
-            # self.log(
-            #     "train/ortho_reg",
-            #     0.01*ortho_reg,
-            #     on_step=True,
-            #     prog_bar=True,
-            #     logger=True,
-            #     sync_dist=True,
-            # )
-        else:
-           anchor_video_embs = self(anchor_videos)
-           pair_video_embs = self(pair_videos)
-
-           anchor_video_embs = F.normalize(anchor_video_embs, dim=-1) # b x d
-           pair_video_embs = F.normalize(pair_video_embs, dim=-1) # b x d
-           pred = torch.mm(anchor_video_embs, pair_video_embs.t()).diagonal()
-
-           loss = compute_mse_loss(pred, sm)
+            ) 
 
         return loss
     
     # for caching embeddings
-    def val_shared_step(self, vid, data):
-        if vid in self.id2emb:
-            return self.id2emb[vid]
+    def val_shared_step(self, vid, x):
+        if vid in self.id2vemb:
+            return self.id2vemb[vid]
         else:
-            # x, emb = self(data)
-            emb = self(data)
-            # emb = emb.to("cpu")
-            self.id2emb[vid] = emb
+            x = x.unsqueeze(dim=0) # 1 x n x d or 1 x d
+            emb = self(x, pad_mask=None).squeeze(dim=0) # k x d or d
+            self.id2vemb[vid] = emb
             return emb
 
     def validation_step(self, batch, batch_idx):
+        # get query data
         query_video_id = batch["query_video_id"]
-        query_cname = batch["query_cname"] # dataset dependent field
+        query_cname = batch["query_cname"]
         query_video = batch["query_video"]
+        
+        # get target data
+        trg_video_ids = batch["trg_video_ids"]
+        trg_cnames = batch["trg_cnames"] 
+        trg_videos = batch["trg_videos"]
 
-        ref_video_ids = batch["ref_video_ids"]
-        ref_cnames = batch["ref_cnames"] # dataset dependent field
-        if "ref_videos" in batch:
-            ref_videos = batch["ref_videos"]
+        # semantic similarities (surrogate measure)
+        similarities = batch["similarities"]
+        
+        query_emb = self.val_shared_step(query_video_id, query_video)
+        trg_embs = []
+        for trg_vid, trg_video in zip(trg_video_ids, trg_videos):
+            trg_embs.append(self.val_shared_step(trg_vid, trg_video))
+        trg_embs = torch.stack(trg_embs, dim=0)
+        
+        if self.cfg.MODEL.VIDEO.name == "ours": # proposed
+            pred = []
+            query_emb = query_emb.unsqueeze(dim=0)
+            k = query_emb.shape[1] # number of slot
+            for trg_emb in trg_embs:
+                trg_emb = trg_emb.unsqueeze(dim=0)
+                p = 1. - (self.sdtw_loss(query_emb, trg_emb) / 2*k)
+                pred.append(p.squeeze())
+            pred = torch.stack(pred)
+        else: # baseline
+            query_emb = F.normalize(query_emb, dim=-1)
+            trg_embs = F.normalize(trg_embs, dim=-1)
+            pred = torch.matmul(query_emb, trg_embs.t())
 
-        sm = batch["sm"]
-
-        if self.cfg.MODEL.VIDEO.name == "slot":
-            self.eval_query_vids.append(query_video_id)
-            self.eval_ref_vids.append(ref_video_ids)
-            self.eval_query_cnames.append(query_cname)
-            self.eval_ref_cnames.append(ref_cnames)
-            self.eval_sm_l.append(sm)
-            query_video_emb = self.val_shared_step(query_video_id, query_video)  
-        else:
-            query_video_emb = self.val_shared_step(query_video_id, query_video)
-            ref_video_embs = []
-            for vid, data in zip(ref_video_ids, ref_videos):
-                ref_video_embs.append(self.val_shared_step(vid, data))
-            ref_video_embs = torch.stack(ref_video_embs, dim=0)
-
-            query_video_emb = F.normalize(query_video_emb, dim=-1)
-            ref_video_embs = F.normalize(ref_video_embs, dim=-1)
-            pred = torch.matmul(query_video_emb, ref_video_embs.t())
-
-            self.ndcg_metric.update(pred, sm)
-            self.mse_error.update(pred, sm)
-
-            if False:
-                visualize_result(
-                    path="/root/visualize_results/",
-                    model=self.cfg.MODEL.VIDEO.name,
-                    pred=pred,
-                    sm=sm,
-                    src_vid=query_video_id,
-                    src_activity_name=query_cname,
-                    ref_activity_names=ref_cnames,
-                )
+        self.ndcg_metric.update(pred, similarities)
+        self.mse_error.update(pred, similarities)
         
     def validation_epoch_end(self, validation_step_outputs):
-        if self.cfg.MODEL.VIDEO.name == "slot":
-            for query_vid, ref_vids, query_cname, ref_cnames, sm in zip(
-                self.eval_query_vids, 
-                self.eval_ref_vids, 
-                self.eval_query_cnames, 
-                self.eval_ref_cnames, 
-                self.eval_sm_l
-            ):
-                pred = []
-                query_video_emb = self.id2emb[query_vid]
-                ref_video_embs = [self.id2emb[vid] for vid in ref_vids]
-                for ref_emb in ref_video_embs:
-                    if self.cfg.RELEVANCE.type == "mean":
-                        pred.append(compute_cosine_mean_similarity(query_video_emb, ref_emb))
-                    elif self.cfg.RELEVANCE.type == "smooth-chamfer":
-                        alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
-                        pred.append(compute_smooth_chamfer_similarity(query_video_emb, ref_emb, alpha))
-                    elif self.cfg.RELEVANCE.type == "dtw":
-                        pred.append(compute_cosine_mean_similarity(query_video_emb, ref_emb))
-                        # q = query_video_emb.unsqueeze(dim=0)
-                        # r = ref_emb.unsqueeze(dim=0)
-                        # p = 1. - (self.sdtw(q, r) / (q.shape[1] + r.shape[1]))
-                        # pred.append(p.squeeze())
-                pred = torch.stack(pred)
-
-                self.ndcg_metric.update(pred, sm)
-                self.mse_error.update(pred, sm)
-
-                if False:
-                    visualize_result(
-                        path="/root/visualize_results",
-                        model=self.cfg.MODEL.VIDEO.name,
-                        pred=pred,
-                        sm=sm,
-                        src_vid=query_vid,
-                        src_activity_name=query_cname,
-                        ref_activity_names=ref_cnames,
-                    )
-
         score = self.ndcg_metric.compute()
         score["mse_error"] = self.mse_error.compute()
         
@@ -389,12 +281,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
             
         self.print(f"Test score: {score}")
         
-        self.id2emb = {}
-        self.eval_query_vids = []
-        self.eval_ref_vids = []
-        self.eval_query_cnames = []
-        self.eval_ref_cnames = []
-        self.eval_sm_l = []
+        self.id2vemb = {}
         self.ndcg_metric.reset()
         self.mse_error.reset()
         

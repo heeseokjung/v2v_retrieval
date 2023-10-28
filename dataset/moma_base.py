@@ -26,52 +26,20 @@ class MOMARetrievalBaseDataset(Dataset):
         self.paradigm = self.args.paradigm
         self.split = split
 
-        self._load_anno_data(split)
+        self._load_anno_data()
         self._set_pairwise_similarity()
 
-        self.graph_cache = {}
-
-    def _load_anno_data(self, split):
-        with open(f"anno/moma/{split}.ndjson", "r") as f:
+    def _load_anno_data(self):
+        with open(f"anno/moma/{self.split}.ndjson", "r") as f:
             self.anno = ndjson.load(f)
+        self.n_videos = len(self.anno)
         self.id2cemb = torch.load("anno/moma/id2cemb.pt")
 
     def _set_pairwise_similarity(self):
         type = self.cfg.RELEVANCE.type
-        if os.path.exists(f"anno/moma/sm_{type}_{self.split}.pt"):
-            print(f"Load from pre-computed surrogate measure [{type}]")
-            self.sm = torch.load(f"anno/moma/sm_{type}_{self.split}.pt")
-            # self.sm = np.load(f"anno/moma/sm_{type}_{self.split}.npy")
-            # self.sm = torch.from_numpy(self.sm).float()
-        else:
-            self.sm = np.zeros((len(self.anno), len(self.anno))).astype(np.float32)
-            check = np.zeros((len(self.anno), len(self.anno))).astype(bool)
-            for i in tqdm(range(len(self.anno)), desc=f"Compute pair-wise surrogate measure [{type}]"):
-                for j in range(len(self.anno)):
-                    if check[j][i]:
-                        self.sm[i][j] = self.sm[j][i]
-                        continue
-                    if type == "mean":
-                        c_i = self.id2cemb[self.anno[i]["video_id"]]
-                        c_j = self.id2cemb[self.anno[j]["video_id"]]
-                        self.sm[i][j] = compute_cosine_mean_similarity(c_i, c_j)
-                        check[i][j] = True
-                    elif type == "smooth-chamfer":
-                        c_i = self.id2cemb[self.anno[i]["video_id"]]
-                        c_j = self.id2cemb[self.anno[j]["video_id"]]
-                        alpha = self.RELEVANCE.smooth_chamfer.alpha
-                        self.sm[i][j] = compute_smooth_chamfer_similarity(c_i, c_j, alpha)
-                        check[i][j] = True
-                    elif type == "dtw":
-                        c_i = self.id2cemb[self.anno[i]["video_id"]]
-                        c_j = self.id2cemb[self.anno[j]["video_id"]]
-                        self.sm[i][j] = compute_dtw_similarity(c_i, c_j)
-                        check[i][j] = True
-                    else:
-                        raise NotImplementedError
-            
-            np.save(f"anno/moma/sm_{type}_{self.split}.npy", self.sm)
-            self.sm = torch.from_numpy(self.sm).float()
+        print(f"Load from pre-computed surrogate measure [{type}]")
+        self.sm = np.load(f"anno/moma/sm_{type}_{self.split}.npy")
+        self.sm = torch.from_numpy(self.sm).float()
                 
     def transform_s3d(self, snippet):
         ''' stack & noralization '''
@@ -127,7 +95,7 @@ class MOMARetrievalBaseDataset(Dataset):
                     video.append(clip)
 
                 return torch.stack(video, dim=0) # n_clips x n_frames(=4) x 3 x 224 x 224
-        elif self.cfg.MODEL.VIDEO.name == "slot":
+        elif self.cfg.MODEL.VIDEO.name == "ours":
             path = os.path.join(self.args.path, "feats", "frozen", f"{vid}.npy")
             feat = torch.from_numpy(np.load(path)).float() # n_clips x n_patches (785) x d
             return feat[:,0,:] # only CLS token

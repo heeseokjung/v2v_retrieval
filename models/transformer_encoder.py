@@ -9,7 +9,6 @@ class TransformerEncoder(nn.Module):
         self.cfg = cfg
         self.args = cfg.MODEL.VIDEO.TRANSFORMER
 
-        # self.linear = nn.Linear(self.args.in_dim, self.args.d_model)
         self.encoder_layer = nn.TransformerEncoderLayer(
             d_model=self.args.d_model,
             nhead=self.args.nhead,
@@ -23,9 +22,12 @@ class TransformerEncoder(nn.Module):
             num_layers=self.args.num_layers,
         )
 
-    def forward(self, x):
-        # x = self.linear(x) # n x d -> n x d_model
-        x = x.unsqueeze(dim=0) # n x d_model -> 1 x n x d_model (for batch computation)
-        x = self.encoder(x) # 1 x n x d_model
-        x = x.squeeze(dim=0)
+        self.pos_emb = nn.Embedding(self.args.max_len, self.args.d_model)
+        self.register_buff("pos_ids", torch.arange(self.args.max_len, dtype=torch.long))
+
+    def forward(self, x, pad_mask):
+        pos_emb = self.pos_emb(self.pos_ids[:x.shape[1]])
+        x = x + pos_emb[None, :]
+        x = self.encoder(x, src_key_padding_mask=pad_mask)
+        
         return x
