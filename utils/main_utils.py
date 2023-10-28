@@ -162,7 +162,7 @@ def init_model(cfg):
             video_encoder=video_encoder,
             slot_encoder=slot_encoder,
             checkpoint_path=os.path.join(cfg.PATH.CKPT_PATH, cfg.MODEL.LOAD_FROM, "model-v1.ckpt"),
-            strict=False,
+            strict=True,
         )
     else:
         model = VideoRetrievalWrapper(
@@ -183,7 +183,7 @@ def init_trainer(cfg):
     
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[2],
+        devices=[1],
         logger=logger,
         log_every_n_steps=1,
         num_sanity_val_steps=0,

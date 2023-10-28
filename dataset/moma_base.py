@@ -41,8 +41,10 @@ class MOMARetrievalBaseDataset(Dataset):
         if os.path.exists(f"anno/moma/sm_{type}_{self.split}.pt"):
             print(f"Load from pre-computed surrogate measure [{type}]")
             self.sm = torch.load(f"anno/moma/sm_{type}_{self.split}.pt")
+            # self.sm = np.load(f"anno/moma/sm_{type}_{self.split}.npy")
+            # self.sm = torch.from_numpy(self.sm).float()
         else:
-            self.sm = torch.zeros(len(self.anno), len(self.anno))
+            self.sm = np.zeros((len(self.anno), len(self.anno))).astype(np.float32)
             check = np.zeros((len(self.anno), len(self.anno))).astype(bool)
             for i in tqdm(range(len(self.anno)), desc=f"Compute pair-wise surrogate measure [{type}]"):
                 for j in range(len(self.anno)):
@@ -63,15 +65,13 @@ class MOMARetrievalBaseDataset(Dataset):
                     elif type == "dtw":
                         c_i = self.id2cemb[self.anno[i]["video_id"]]
                         c_j = self.id2cemb[self.anno[j]["video_id"]]
-                        # s_ij = compute_dtw_similarity(c_i, c_j)
-                        # s_ji = compute_dtw_similarity(c_j, c_i)
-                        # self.sm[i][j] = (s_ij + s_ji) / 2
                         self.sm[i][j] = compute_dtw_similarity(c_i, c_j)
                         check[i][j] = True
                     else:
                         raise NotImplementedError
-                    
-            torch.save(self.sm, f"anno/moma/sm_{type}_{self.split}.pt")
+            
+            np.save(f"anno/moma/sm_{type}_{self.split}.npy", self.sm)
+            self.sm = torch.from_numpy(self.sm).float()
                 
     def transform_s3d(self, snippet):
         ''' stack & noralization '''

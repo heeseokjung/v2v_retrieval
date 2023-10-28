@@ -31,7 +31,6 @@ def main():
             
             with torch.no_grad():
                 cemb = sbert.encode(captions)
-                cemb = torch.from_numpy(cemb).float()
             id2cemb[act.id] = cemb
 
         with open(f"anno/moma/{split}.ndjson", "w") as f:

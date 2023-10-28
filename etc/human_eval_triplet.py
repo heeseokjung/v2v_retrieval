@@ -19,90 +19,27 @@ from tqdm import tqdm
 # GLOBAL VARIABLE (TRIPLET IDX)
 triplet_idx = 0
 
-# W/ GAP
-def compute_dtw_score_allow_gap(x, y, eps, w):
+def compute_dtw_similarity(x, y):
     nx = x / np.linalg.norm(x, axis=-1, keepdims=True)
     ny = y / np.linalg.norm(y, axis=-1, keepdims=True)
     z = np.matmul(nx, ny.T)
 
     m, n = z.shape[0], z.shape[1]
-    R = np.ones((m+1, n+1))
-    R[0,:], R[:,0] = -np.inf, -np.inf
-    R[0,0] = 0
+    R = np.ones((m+1, n+1)) * -10000000.
+    R[0, 0] = 0.
 
     for i in range(1, m+1):
         for j in range(1, n+1):
-            # if abs(i - j) > w:
-            #     continue
-            r0 = R[i-1, j-1] + z[i-1, j-1]
-            r1 = R[i-1, j] + eps
-            r2 = R[i, j-1] + eps
-            R[i, j] = max(r0, r1, r2)
+            r0 = R[i-1, j-1] + 2*z[i-1, j-1]
+            r1 = R[i-1, j] + z[i-1, j-1]
+            r2 = R[i, j-1] + z[i-1, j-1]
+            R[i, j] = max(r0, r1, r2) 
 
-    # backtracking
-    i, j, size = m, n, 0
-    while i >= 1 and j >= 1:
-        size += 1
-        r0 = R[i-1, j-1] + z[i-1, j-1]
-        r1 = R[i-1, j] + eps
-        r2 = R[i, j-1] + eps
-        rmax = max(r0, r1, r2)
-
-        if rmax == r0:
-            i, j = i - 1, j - 1
-        elif rmax == r1:
-            i = i - 1
-        elif rmax == r2:
-            j = j - 1
-        else:
-            raise ValueError
-        
-    # print(f"R[m, n]: {R[m, n]} size: {size} score: {R[m,n] / size}")
-        
-    return R[m, n] / size
+    return R[m, n] / (m + n)
 
 
-# W/O GAP
-def compute_dtw_score(x, y, eps, w):
-    nx = x / np.linalg.norm(x, axis=-1, keepdims=True)
-    ny = y / np.linalg.norm(y, axis=-1, keepdims=True)
-    z = np.matmul(nx, ny.T)
-
-    m, n = z.shape[0], z.shape[1]
-    R = np.ones((m+1, n+1))
-    R[0,:], R[:,0] = -np.inf, -np.inf
-    R[0,0] = 0
-
-    for i in range(1, m+1):
-        for j in range(1, n+1):
-            # if abs(i - j) > w:
-            #     continue
-            r0 = R[i-1, j-1] 
-            r1 = R[i-1, j] 
-            r2 = R[i, j-1] 
-            R[i, j] = max(r0, r1, r2) + z[i-1, j-1]
-
-    # backtracking
-    i, j, size = m, n, 0
-    while i >= 1 and j >= 1:
-        size += 1
-        r0 = R[i-1, j-1] 
-        r1 = R[i-1, j] 
-        r2 = R[i, j-1] 
-        rmax = max(r0, r1, r2)
-
-        if rmax == r0:
-            i, j = i - 1, j - 1
-        elif rmax == r1:
-            i = i - 1
-        elif rmax == r2:
-            j = j - 1
-        else:
-            raise ValueError
-        
-    # print(f"R[m, n]: {R[m, n]} size: {size} score: {R[m,n] / size}")
-        
-    return R[m, n] / size
+def cosine_similarity(x, y):
+    return np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y))
 
 
 def preprocess_moma():
@@ -128,37 +65,42 @@ def moma_triplet_generator(
         feat_type="s3d", 
         n_sample_per_class=25, 
         topk=20,
-        threshold=0.05,
+        threshold=0.1,
     ):
     root_path = "/data/dir_moma"
     feat_path = os.path.join(root_path, "feats", feat_type)
 
     moma = MOMA("/data/dir_moma")
     act_taxonomy = moma.taxonomy["act"]
-    vid2seqembs = preprocess_moma()
+    # vid2seqembs = preprocess_moma()
 
-    diffs = []
     for cname in tqdm(act_taxonomy, desc="[MOMA] generate triplets"):
         ids_act = moma.get_ids_act(cnames_act=cname)
-        # print(f"class: {cname} size: {len(ids_act)}")
+        n_sact = []
+        for act in moma.get_anns_act(ids_act=ids_act):
+            n_sact.append(len(act.ids_sact))
+        n_sact = np.array(n_sact)
+        sorted_idx = np.argsort(n_sact)
 
-        # distance: n_query x topk, knn_idx: n_query x topk
-        # sampled_qidx = random.sample(range(len(ids_act)), n_sample_per_class) # w/o replacement
-        # for qidx in sampled_qidx:
-        #     j, k = random.sample(range())
+        count = 0
+        for idx in sorted_idx:
+            if count == n_sample_per_class:
+                break
+            if n_sact[idx] < 3:
+                continue
+            
+            qvid = ids_act[idx]
+            candidates = [vid for vid in ids_act if vid != qvid]
 
-        sampled_qvid = random.sample(ids_act, n_sample_per_class)
-        for qvid in sampled_qvid:
+            query_video = np.load(os.path.join(feat_path, f"{qvid}.npy")).mean(axis=0)
             while True:
-                candidates = [vid for vid in ids_act if vid != qvid]
                 vid1, vid2 = random.sample(candidates, 2)
-                
-                query_video = vid2seqembs[qvid]
-                video1, video2 = vid2seqembs[vid1], vid2seqembs[vid2]
-                rel1 = compute_dtw_score(query_video, video1, 0, 0)
-                rel2 = compute_dtw_score(query_video, video2, 0, 0)
-                if abs(rel1 - rel2) > threshold:
-                    diffs.append(abs(rel1 - rel2))
+                video1 = np.load(os.path.join(feat_path, f"{vid1}.npy")).mean(axis=0)
+                video2 = np.load(os.path.join(feat_path, f"{vid2}.npy")).mean(axis=0)
+                sim1 = cosine_similarity(query_video, video1)
+                sim2 = cosine_similarity(query_video, video2)
+
+                if abs(sim1 - sim2) > threshold:
                     break
 
             global triplet_idx
@@ -168,8 +110,8 @@ def moma_triplet_generator(
                 "qvid": qvid,
                 "vid1": vid1,
                 "vid2": vid2,
-                "rel1": rel1,
-                "rel2": rel2,
+                "rel1": sim1,
+                "rel2": sim2,
                 "s1": 0,
                 "s2": 0,
                 "s3": 0,
@@ -178,9 +120,7 @@ def moma_triplet_generator(
 
             triplet_list.append(triplet)
             triplet_idx += 1
-
-    diffs = torch.tensor(diffs)
-    print(f"rel diff avg: {diffs.mean()} std: {diffs.std()} min: {diffs.min()} max: {diffs.max()}")
+            count += 1
 
     return triplet_list
 
@@ -222,9 +162,9 @@ def preprocess_activitynet(anno_path, feat_path, feat_type):
 def activitynet_triplet_generator(
         triplet_list,
         feat_type="imagenet",
-        n_sample=600,
-        topk=100,
-        threshold=0.15,
+        n_sample=500,
+        topk=50,
+        threshold=0.2,
     ):
     root_path = "/data/dir_activitynet"
     anno_path = os.path.join(root_path, "anno")
@@ -250,8 +190,8 @@ def activitynet_triplet_generator(
             query_video = vid2seqembs[qvid]
             video1 = vid2seqembs[vid1]
             video2 = vid2seqembs[vid2]
-            rel1 = compute_dtw_score(query_video, video1, 0, 0)
-            rel2 = compute_dtw_score(query_video, video2, 0, 0)
+            rel1 = compute_dtw_similarity(query_video, video1)
+            rel2 = compute_dtw_similarity(query_video, video2)
 
             if abs(rel1 - rel2) > threshold:
                 diffs.append(abs(rel1 - rel2))
@@ -342,8 +282,8 @@ def howto100m_triplet_generator(
                     video1 = sbert.encode(sum(caption_data[video_ids[knn_idx[i][j]]]["text"], []))
                     video2 = sbert.encode(sum(caption_data[video_ids[knn_idx[i][k]]]["text"], []))
                 # print(f"query: {query_video.shape} video1: {video1.shape} video2: {video2.shape}")
-                rel1 = compute_dtw_score(query_video, video1, eps=0, w=-1)
-                rel2 = compute_dtw_score(query_video, video2, eps=0, w=-1)
+                rel1 = compute_dtw_similarity(query_video, video1, eps=0, w=-1)
+                rel2 = compute_dtw_similarity(query_video, video2, eps=0, w=-1)
                 # print(f"rel1 ({video_ids[knn_idx[i][j]]}): {rel1} rel2 ({video_ids[knn_idx[i][k]]}): {rel2} diff: {abs(rel1-rel2)}")
                 if abs(rel1 - rel2) >= threshold:
                     break

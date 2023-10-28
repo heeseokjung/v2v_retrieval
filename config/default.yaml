@@ -13,10 +13,8 @@ DATASET:
     paradigm: "standard"
     tail_range: 400
     use_over_sampling: True
-  ag:
-    path: "/data/action_genome"
 MODEL:
-  LOAD_FROM: ""
+  LOAD_FROM: "ours"
   VIDEO:
     name: "slot" 
     S3D:
@@ -44,6 +42,7 @@ MODEL:
       freeze: True
       clip_duration: 8
     TRANSFORMER:
+      in_dim: 768
       d_model: 768
       nhead: 8
       dim_feedforward: 1024
@@ -51,12 +50,12 @@ MODEL:
       num_layers: 2
   SLOT: 
     input_size: 768
-    slot_size: 384
-    mlp_hidden_size: 384
+    slot_size: 256
+    mlp_hidden_size: 256
     init_type: "gaussian"
     num_slots: 8
     num_iterations: 3
-    epsilon: 0.0001
+    epsilon: 0.00001
 TRAIN:
   dataset: "moma"
   optimizer: "adam"

@@ -23,6 +23,7 @@ class SlotAttention(nn.Module):
 
         self.norm_inputs = nn.LayerNorm(self.args.input_size)
         self.norm_slots = nn.LayerNorm(self.args.slot_size)
+        # self.norm_pos = nn.LayerNorm(self.args.slot_size)
         self.norm_mlp = nn.LayerNorm(self.args.slot_size)
 
         # Parameters for Gaussian init (shared by all slots).
@@ -42,6 +43,9 @@ class SlotAttention(nn.Module):
             )
         else:
             raise NotImplementedError
+        
+        # Position embedding for soft-DTW
+        # self.pos = nn.Parameter(torch.Tensor(self.args.num_slots, self.args.slot_size))
 
         # Linear maps for the attention module.
         self.project_q = nn.Linear(self.args.slot_size, self.args.slot_size, bias=False)
@@ -81,6 +85,8 @@ class SlotAttention(nn.Module):
         for i in range(self.args.num_iterations):
             slots_prev = slots
             slots = self.norm_slots(slots)
+            # pos = self.norm_pos(self.pos)
+            # slots = slots + pos
 
             # Attention
             q = self.project_q(slots) # n_slot x d
@@ -103,6 +109,7 @@ class SlotAttention(nn.Module):
             # plt.close()
 
             # tmp_attn = attn[:].t().detach().cpu().numpy()
+            # plt.figure(figsize=(20, 8))
             # sns.heatmap(tmp_attn)
             # plt.savefig(f"/root/slot_vis/slot/{self.count}_iter{i}.png")
             # plt.close()
