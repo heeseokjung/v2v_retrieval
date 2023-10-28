@@ -28,10 +28,7 @@ from models.frozen import (
     FrozenInTimeProjector,
 )
 from utils.frozen_utils import state_dict_data_parallel_fix
-from models.transformer_encoder import TransformerEncoder
-
-# Slot encoder model
-from models.slot import SlotAttention
+from models.slot import TemporalSlotAttentionVideoEncoder
 
 from models.video_retrieval_wrapper import VideoRetrievalWrapper
 
@@ -94,8 +91,8 @@ def init_dataloaders(cfg):
 
 def init_model(cfg):
     # Load video encoder model
-    if cfg.MODEL.VIDEO.name == "s3d":
-        s3d_args = cfg.MODEL.VIDEO.S3D
+    if cfg.MODEL.name == "s3d":
+        s3d_args = cfg.MODEL.S3D
         s3d_model, s3d_projector = S3D(cfg), S3DProjector(cfg)
 
         if s3d_args.use_kinetics_pretrained:
@@ -121,8 +118,8 @@ def init_model(cfg):
                 s3d_model,
                 s3d_projector,
             )
-    elif cfg.MODEL.VIDEO.name == "frozen":
-        frozen_args = cfg.MODEL.VIDEO.FROZEN
+    elif cfg.MODEL.name == "frozen":
+        frozen_args = cfg.MODEL.FROZEN
         frozen_model, frozen_projector = FrozenInTime(cfg), FrozenInTimeProjector(cfg)
 
         if frozen_args.use_cc_web_pretrained:
@@ -145,30 +142,22 @@ def init_model(cfg):
                 frozen_model,
                 frozen_projector,
             )
-    elif cfg.MODEL.VIDEO.name == "slot":
-        video_encoder = TransformerEncoder(cfg) # 여기에 그 트랜스포머 인코더 들어가는 거
+    elif cfg.MODEL.name == "ours":
+        video_encoder = TemporalSlotAttentionVideoEncoder(cfg) 
     else:
-        video_encoder = None
-
-    # Load slot attention model
-    if cfg.MODEL.VIDEO.name == "slot":
-        slot_encoder = SlotAttention(cfg)
-    else:
-        slot_encoder = None
+        raise NotImplementedError
 
     if "LOAD_FROM" in cfg.MODEL and len(cfg.MODEL.LOAD_FROM) > 0:
         model = VideoRetrievalWrapper.load_from_checkpoint(
             cfg=cfg,
             video_encoder=video_encoder,
-            slot_encoder=slot_encoder,
             checkpoint_path=os.path.join(cfg.PATH.CKPT_PATH, cfg.MODEL.LOAD_FROM, "model-v1.ckpt"),
             strict=True,
         )
     else:
         model = VideoRetrievalWrapper(
             cfg=cfg, 
-            video_encoder=video_encoder, 
-            slot_encoder=slot_encoder,
+            video_encoder=video_encoder,
         )
     
     return model

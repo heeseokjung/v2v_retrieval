@@ -104,7 +104,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
 
         # loss functions
         self.mse_loss = nn.MSELoss(reduction="mean")
-        self.sdtw_loss = SoftDTWLossPyTorch(gamma=0.1, normalize=True, cdist=cdist)
+        self.sdtw_loss = SoftDTWLossPyTorch(gamma=0.1, normalize=True, dist_func=cdist)
         
         # used in eval step
         self.id2vemb = {}
@@ -115,7 +115,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
         self.id2cemb = torch.load("anno/moma/id2cemb.pt")
     
     def forward(self, x, pad_mask):
-        if self.cfg.MODEL.VIDEO.name == "ours":
+        if self.cfg.MODEL.name == "ours":
             return self.video_encoder(x, pad_mask) # b x k x d
         else:
             return self.video_encoder(x) # b x d
@@ -133,14 +133,14 @@ class VideoRetrievalWrapper(pl.LightningModule):
         pair_cnames = batch["pair_cnames"] 
         pair_videos = batch["pair_videos"]
         if "pair_pad_mask" in batch:
-            pair_pad_mask = batch["anchor_pad_mask"]
+            pair_pad_mask = batch["pair_pad_mask"]
         
         # semantic similarities (surrogate measure)
         similarities = batch["similarities"]
 
-        if self.cfg.MODEL.VIDEO.name == "ours": # proposed
-            anchor_embs = self(anchor_videos) # b x k x d
-            pair_embs = self(pair_videos) # b x k x d
+        if self.cfg.MODEL.name == "ours": # proposed
+            anchor_embs = self(anchor_videos, anchor_pad_mask) # b x k x d
+            pair_embs = self(pair_videos, pair_pad_mask) # b x k x d
 
             if self.cfg.RELEVANCE.type == "cosine":
                 anchor_embs = F.normalize(anchor_embs, dim=-1)
@@ -247,7 +247,7 @@ class VideoRetrievalWrapper(pl.LightningModule):
             trg_embs.append(self.val_shared_step(trg_vid, trg_video))
         trg_embs = torch.stack(trg_embs, dim=0)
         
-        if self.cfg.MODEL.VIDEO.name == "ours": # proposed
+        if self.cfg.MODEL.name == "ours": # proposed
             pred = []
             query_emb = query_emb.unsqueeze(dim=0)
             k = query_emb.shape[1] # number of slot

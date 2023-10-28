@@ -9,7 +9,7 @@ class FrozenInTimeProjector(nn.Module):
         super().__init__()
 
         self.cfg = cfg
-        self.args = cfg.MODEL.VIDEO.FROZEN.projector
+        self.args = cfg.MODEL.FROZEN.projector
 
         self.projector = nn.Sequential(
             nn.Linear(self.args.in_dim, self.args.hidden_dim),
@@ -27,7 +27,7 @@ class FrozenInTime(nn.Module):
         super().__init__()
 
         self.cfg = cfg
-        self.args = cfg.MODEL.VIDEO.FROZEN
+        self.args = cfg.MODEL.FROZEN
 
         self.video_model = SpaceTimeTransformer(
             num_frames=self.args.num_frames,

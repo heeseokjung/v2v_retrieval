@@ -12,7 +12,7 @@ class S3DProjector(nn.Module):
         super(S3DProjector, self).__init__()
 
         self.cfg = cfg
-        self.args = cfg.MODEL.VIDEO.S3D.projector
+        self.args = cfg.MODEL.S3D.projector
 
         self.projector = nn.Sequential(
             nn.Linear(self.args.in_dim, self.args.hidden_dim),
@@ -30,7 +30,7 @@ class S3D(nn.Module):
         super(S3D, self).__init__()
 
         self.cfg = cfg
-        self.args = cfg.MODEL.VIDEO.S3D
+        self.args = cfg.MODEL.S3D
             
         self.base = nn.Sequential(
             SepConv3d(3, 64, kernel_size=7, stride=2, padding=3),

@@ -14,8 +14,8 @@ DATASET:
     tail_range: 400
     use_over_sampling: True
 MODEL:
-  LOAD_FROM: "ours"
-  name: "slot" 
+  LOAD_FROM: ""
+  name: "ours" 
   S3D:
     projector:
       in_dim: 1024
@@ -49,7 +49,7 @@ MODEL:
     dropout: 0.1
     num_layers: 2
   SLOT: 
-    slot:
+    slot_attn:
       num_slots: 8
       dim: 768
       iters: 3
@@ -63,6 +63,9 @@ MODEL:
       dim_feedforward: 1024
       dropout: 0.1
       num_layers: 2
+    decoder:
+      in_dim: 768
+      out_dim: 384
 TRAIN:
   dataset: "moma"
   optimizer: "adam"

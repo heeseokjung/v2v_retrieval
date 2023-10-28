@@ -56,8 +56,8 @@ class MOMARetrievalBaseDataset(Dataset):
         return snippet
 
     def load_video(self, vid):
-        if self.cfg.MODEL.VIDEO.name == "s3d":
-            s3d_args = self.cfg.MODEL.VIDEO.S3D
+        if self.cfg.MODEL.name == "s3d":
+            s3d_args = self.cfg.MODEL.S3D
             if s3d_args.freeze:
                 path = os.path.join(self.args.path, "preprocessed", "s3d", f"{vid}.npy")
                 feat = torch.from_numpy(np.load(path)) # d,
@@ -76,8 +76,8 @@ class MOMARetrievalBaseDataset(Dataset):
                     video.append(clip)
 
                 return torch.cat(video, dim=0) # n_clips x 3 x n_frames x h x w
-        elif self.cfg.MODEL.VIDEO.name == "frozen":
-            frozen_args = self.cfg.MODEL.VIDEO.FROZEN
+        elif self.cfg.MODEL.name == "frozen":
+            frozen_args = self.cfg.MODEL.FROZEN
             if frozen_args.freeze:
                 path = os.path.join(self.args.path, "preprocessed", "frozen", f"{vid}.npy")
                 feat = torch.from_numpy(np.load(path)) # d,
@@ -95,7 +95,7 @@ class MOMARetrievalBaseDataset(Dataset):
                     video.append(clip)
 
                 return torch.stack(video, dim=0) # n_clips x n_frames(=4) x 3 x 224 x 224
-        elif self.cfg.MODEL.VIDEO.name == "ours":
+        elif self.cfg.MODEL.name == "ours":
             path = os.path.join(self.args.path, "feats", "frozen", f"{vid}.npy")
             feat = torch.from_numpy(np.load(path)).float() # n_clips x n_patches (785) x d
             return feat[:,0,:] # only CLS token

@@ -75,7 +75,7 @@ class MOMACollator(object):
 def get_train_dataset(cfg):
     if cfg.TRAIN.dataset == "moma":
         dataset = MOMARetrievalTrainDataset(cfg)
-        collate_fn = MOMACollator(is_train=True, model=cfg.MODEL.VIDEO.name)
+        collate_fn = MOMACollator(is_train=True, model=cfg.MODEL.name)
         return dataset, collate_fn
     else:
         raise NotImplementedError
@@ -84,7 +84,7 @@ def get_train_dataset(cfg):
 def get_eval_dataset(cfg):
     if cfg.EVAL.dataset == "moma":
         dataset = MOMARetrievalEvalDataset(cfg, cfg.EVAL.split)
-        collate_fn = MOMACollator(is_train=False, model=cfg.MODEL.VIDEO.name)
+        collate_fn = MOMACollator(is_train=False, model=cfg.MODEL.name)
         return dataset, collate_fn
     else:
         raise NotImplementedError
