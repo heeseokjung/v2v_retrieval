@@ -13,19 +13,22 @@ import pandas as pd
 from dtw import *
 from momaapi import MOMA
 from sentence_transformers import SentenceTransformer
+from numpy.lib.stride_tricks import sliding_window_view
 from tqdm import tqdm
 
 
 # GLOBAL VARIABLE (TRIPLET IDX)
 triplet_idx = 0
 
+
+# numpy version
 def compute_dtw_similarity(x, y):
     nx = x / np.linalg.norm(x, axis=-1, keepdims=True)
     ny = y / np.linalg.norm(y, axis=-1, keepdims=True)
     z = np.matmul(nx, ny.T)
 
     m, n = z.shape[0], z.shape[1]
-    R = np.ones((m+1, n+1)) * -10000000.
+    R = np.ones((m+1, n+1)) * -1000000
     R[0, 0] = 0.
 
     for i in range(1, m+1):
@@ -36,6 +39,25 @@ def compute_dtw_similarity(x, y):
             R[i, j] = max(r0, r1, r2) 
 
     return R[m, n] / (m + n)
+
+
+# sliding window version
+def compute_dtw_sliding_window(x, y, w):
+    if x.shape[0] <= w:
+        xv = np.expand_dims(x, axis=0) # k x m x d
+    else:
+        xv = sliding_window_view(x, (w, x.shape[-1])).squeeze() # k x m x d
+    if y.shape[0] <= w:
+        yv = np.expand_dims(y, axis=0) # k x n x d
+    else:
+        yv = sliding_window_view(y, (w, y.shape[-1])).squeeze() # k x n x d
+
+    scores = np.zeros((xv.shape[0], yv.shape[0]))
+    for i, p in enumerate(xv):
+        for j, q in enumerate(yv):
+            scores[i][j] = compute_dtw_similarity(p, q)
+
+    return (scores.max(axis=0).mean() + scores.max(axis=1).mean()) / 2
 
 
 def cosine_similarity(x, y):
@@ -73,6 +95,7 @@ def moma_triplet_generator(
     moma = MOMA("/data/dir_moma")
     act_taxonomy = moma.taxonomy["act"]
     # vid2seqembs = preprocess_moma()
+    id2cemb = torch.load("/root/cvpr24_video_retrieval/anno/moma/id2cemb.pt")
 
     for cname in tqdm(act_taxonomy, desc="[MOMA] generate triplets"):
         ids_act = moma.get_ids_act(cnames_act=cname)
@@ -99,8 +122,12 @@ def moma_triplet_generator(
                 video2 = np.load(os.path.join(feat_path, f"{vid2}.npy")).mean(axis=0)
                 sim1 = cosine_similarity(query_video, video1)
                 sim2 = cosine_similarity(query_video, video2)
+                rel1 = compute_dtw_sliding_window(id2cemb[qvid], id2cemb[vid1], w=3)
+                rel2 = compute_dtw_sliding_window(id2cemb[qvid], id2cemb[vid2], w=3)
 
-                if abs(sim1 - sim2) > threshold:
+                if sim1 < sim2 and rel1 > rel2:
+                    break
+                elif sim1 > sim2 and rel1 < rel2:
                     break
 
             global triplet_idx
@@ -110,8 +137,8 @@ def moma_triplet_generator(
                 "qvid": qvid,
                 "vid1": vid1,
                 "vid2": vid2,
-                "rel1": sim1,
-                "rel2": sim2,
+                "rel1": rel1,
+                "rel2": rel2,
                 "s1": 0,
                 "s2": 0,
                 "s3": 0,
@@ -164,7 +191,7 @@ def activitynet_triplet_generator(
         feat_type="imagenet",
         n_sample=500,
         topk=50,
-        threshold=0.2,
+        threshold=0.1,
     ):
     root_path = "/data/dir_activitynet"
     anno_path = os.path.join(root_path, "anno")
@@ -179,7 +206,6 @@ def activitynet_triplet_generator(
     sampled_idx = random.sample(range(len(video_ids)), n_sample)
     distance, knn_idx = index.search(feats[sampled_idx,:], topk)
 
-    diffs = []
     for i, qidx in enumerate(tqdm(sampled_idx, desc="[ActivityNet] generate triplets")):
         while True:
             j, k = random.sample(range(1, topk), 2)
@@ -187,14 +213,17 @@ def activitynet_triplet_generator(
             vid1 = video_ids[knn_idx[i][j]]
             vid2 = video_ids[knn_idx[i][k]]
 
-            query_video = vid2seqembs[qvid]
-            video1 = vid2seqembs[vid1]
-            video2 = vid2seqembs[vid2]
-            rel1 = compute_dtw_similarity(query_video, video1)
-            rel2 = compute_dtw_similarity(query_video, video2)
+            query_video = np.load(os.path.join(feat_path, f"{qvid}.npy"))
+            video1 = np.load(os.path.join(feat_path, f"{vid1}.npy"))
+            video2 = np.load(os.path.join(feat_path, f"{vid2}.npy"))
+            sim1 = cosine_similarity(query_video, video1)
+            sim2 = cosine_similarity(query_video, video2)
+            rel1 = compute_dtw_similarity(vid2seqembs[qvid], vid2seqembs[vid1])
+            rel2 = compute_dtw_similarity(vid2seqembs[qvid], vid2seqembs[vid2])
 
-            if abs(rel1 - rel2) > threshold:
-                diffs.append(abs(rel1 - rel2))
+            if sim1 < sim2 and rel1 > rel2 and abs(rel1- rel2) >= threshold:
+                break
+            elif sim1 > sim2 and rel1 < rel2 and abs(rel1 - rel2) >= threshold:
                 break
 
         global triplet_idx
@@ -214,9 +243,6 @@ def activitynet_triplet_generator(
 
         triplet_list.append(triplet)
         triplet_idx += 1
-
-    diffs = torch.tensor(diffs)
-    print(f"rel diff avg: {diffs.mean()} std: {diffs.std()} min: {diffs.min()} max: {diffs.max()}")
     
     return triplet_list
 
