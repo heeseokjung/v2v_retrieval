@@ -108,13 +108,18 @@ class VideoRetrievalWrapper(pl.LightningModule):
         
         # used in eval step
         self.id2vemb = {}
+        self.eval_query_vids = []
+        self.eval_query_cnames = []
+        self.eval_trg_vids = []
+        self.eval_trg_cnames = []
+        self.eval_similarities = []
         self.ndcg_metric = nDCGMetric([5, 10, 20, 40])
         self.mse_error = MSEError()
 
         # tmp for smooth-chamfer
         self.id2cemb = torch.load("anno/moma/id2cemb.pt")
     
-    def forward(self, x, pad_mask):
+    def forward(self, x, pad_mask=None):
         if self.cfg.MODEL.name == "ours":
             return self.video_encoder(x, pad_mask) # b x k x d
         else:
@@ -236,35 +241,47 @@ class VideoRetrievalWrapper(pl.LightningModule):
         # get target data
         trg_video_ids = batch["trg_video_ids"]
         trg_cnames = batch["trg_cnames"] 
-        trg_videos = batch["trg_videos"]
 
         # semantic similarities (surrogate measure)
         similarities = batch["similarities"]
         
-        query_emb = self.val_shared_step(query_video_id, query_video)
-        trg_embs = []
-        for trg_vid, trg_video in zip(trg_video_ids, trg_videos):
-            trg_embs.append(self.val_shared_step(trg_vid, trg_video))
-        trg_embs = torch.stack(trg_embs, dim=0)
-        
-        if self.cfg.MODEL.name == "ours": # proposed
-            pred = []
-            query_emb = query_emb.unsqueeze(dim=0)
-            k = query_emb.shape[1] # number of slot
-            for trg_emb in trg_embs:
-                trg_emb = trg_emb.unsqueeze(dim=0)
-                p = 1. - (self.sdtw_loss(query_emb, trg_emb) / 2*k)
-                pred.append(p.squeeze())
-            pred = torch.stack(pred)
-        else: # baseline
-            query_emb = F.normalize(query_emb, dim=-1)
-            trg_embs = F.normalize(trg_embs, dim=-1)
-            pred = torch.matmul(query_emb, trg_embs.t())
+        query_emb = self.val_shared_step(query_video_id, query_video) # save in cache
 
-        self.ndcg_metric.update(pred, similarities)
-        self.mse_error.update(pred, similarities)
+        self.eval_query_vids.append(query_video_id)
+        self.eval_query_cnames.append(query_cname)
+        self.eval_trg_vids.append(trg_video_ids)
+        self.eval_trg_cnames.append(trg_cnames)
+        self.eval_similarities.append(similarities)
         
     def validation_epoch_end(self, validation_step_outputs):
+        for query_vid, query_cname, trg_vids, trg_cnames, similarities in zip(
+            self.eval_query_vids,
+            self.eval_query_cnames,
+            self.eval_trg_vids,
+            self.eval_trg_cnames,
+            self.eval_similarities,
+        ):
+            query_emb = self.id2vemb[query_vid]
+            trg_embs = [self.id2vemb[vid] for vid in trg_vids]
+            trg_embs = torch.stack(trg_embs, dim=0) # b x k x d or b x d
+
+            if self.cfg.MODEL.name == "ours": # proposed
+                pred = []
+                query_emb = query_emb.unsqueeze(dim=0)
+                k = query_emb.shape[1] # number of slot
+                for trg_emb in trg_embs:
+                    trg_emb = trg_emb.unsqueeze(dim=0)
+                    p = 1. - (self.sdtw_loss(query_emb, trg_emb) / 2*k)
+                    pred.append(p.squeeze())
+                pred = torch.stack(pred)
+            else: # baseline
+                query_emb = F.normalize(query_emb, dim=-1)
+                trg_embs = F.normalize(trg_embs, dim=-1)
+                pred = torch.matmul(query_emb, trg_embs.t())
+
+            self.ndcg_metric.update(pred, similarities)
+            self.mse_error.update(pred, similarities)
+
         score = self.ndcg_metric.compute()
         score["mse_error"] = self.mse_error.compute()
         
@@ -282,6 +299,11 @@ class VideoRetrievalWrapper(pl.LightningModule):
         self.print(f"Test score: {score}")
         
         self.id2vemb = {}
+        self.eval_query_vids = []
+        self.eval_query_cnames = []
+        self.eval_trg_vids = []
+        self.eval_trg_cnames = []
+        self.eval_similarities = []
         self.ndcg_metric.reset()
         self.mse_error.reset()
         

@@ -60,11 +60,12 @@ class MOMARetrievalEvalDataset(MOMARetrievalBaseDataset):
 
     def __getitem__(self, idx):
         batch = copy.deepcopy(self.batches[idx]) # batch size is always 1 for eval
-        
+
         query_video = self.load_video(batch["query_video_id"])
         batch["query_video"] = query_video
         
-        trg_videos = [self.load_video(vid) for vid in batch["trg_video_ids"]]
-        batch["trg_videos"] = trg_videos
+        # if self.cfg.MODEL.name != "ours": # due to the computational efficiency
+        #     trg_videos = [self.load_video(vid) for vid in batch["trg_video_ids"]]
+        #     batch["trg_videos"] = trg_videos
         
         return batch
