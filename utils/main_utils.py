@@ -30,7 +30,8 @@ from models.frozen import (
 from utils.frozen_utils import state_dict_data_parallel_fix
 from models.slot import TemporalSlotAttentionVideoEncoder
 
-from models.video_retrieval_wrapper import VideoRetrievalWrapper
+from models.moma_video_retrieval_wrapper import MOMAVideoRetrievalWrapper
+from models.howto100m_video_retrieval_wrapper import HowTo100MVideoRetrievalWrapper
 
 
 def seed_everything(seed):
@@ -147,18 +148,37 @@ def init_model(cfg):
     else:
         raise NotImplementedError
 
-    if "LOAD_FROM" in cfg.MODEL and len(cfg.MODEL.LOAD_FROM) > 0:
-        model = VideoRetrievalWrapper.load_from_checkpoint(
-            cfg=cfg,
-            video_encoder=video_encoder,
-            checkpoint_path=os.path.join(cfg.PATH.CKPT_PATH, cfg.MODEL.LOAD_FROM, "model-v1.ckpt"),
-            strict=True,
-        )
+    # Load video retrieval wrapper model (different across datasets)
+    if cfg.DATASET.name == "moma":
+        if "LOAD_FROM" in cfg.MODEL and len(cfg.MODEL.LOAD_FROM) > 0:
+            model = MOMAVideoRetrievalWrapper.load_from_checkpoint(
+                cfg=cfg,
+                video_encoder=video_encoder,
+                checkpoint_path=os.path.join(cfg.PATH.CKPT_PATH, cfg.MODEL.LOAD_FROM, "model-v1.ckpt"),
+                strict=True,
+            )
+        else:
+            model = MOMAVideoRetrievalWrapper(
+                cfg=cfg,
+                video_encoder=video_encoder,
+            )
+    elif cfg.DATASET.name == "howto100m":
+        if "LOAD_FROM" in cfg.MODEL and len(cfg.MODEL.LOAD_FROM) > 0:
+            model = HowTo100MVideoRetrievalWrapper.load_from_checkpoint(
+                cfg=cfg,
+                video_encoder=video_encoder,
+                checkpoint_path=os.path.join(cfg.PATH.CKPT_PATH, cfg.MODEL.LOAD_FROM, "model-v1.ckpt"),
+                strict=True,
+            )
+        else:
+            model = HowTo100MVideoRetrievalWrapper(
+                cfg=cfg,
+                video_encoder=video_encoder,
+            )
+    elif cfg.DATASET.name == "activitynet-captions":
+        ...
     else:
-        model = VideoRetrievalWrapper(
-            cfg=cfg, 
-            video_encoder=video_encoder,
-        )
+        raise NotImplementedError
     
     return model
 
@@ -172,7 +192,8 @@ def init_trainer(cfg):
     
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[3],
+        devices=[0, 1, 2],
+        strategy="ddp",
         logger=logger,
         log_every_n_steps=1,
         num_sanity_val_steps=0,

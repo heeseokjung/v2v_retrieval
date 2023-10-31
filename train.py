@@ -11,7 +11,7 @@ def main():
     cfg, logger = init_config("config/default.yaml")
     
     # init dataloader
-    logger.info(f"init dataloader... train: {cfg.TRAIN.dataset} val: {cfg.EVAL.dataset}")
+    logger.info(f"init dataloader... [{cfg.DATASET.name}]")
     train_dataloader, val_dataloader = init_dataloaders(cfg)
     
     # init model

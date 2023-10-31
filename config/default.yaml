@@ -8,10 +8,15 @@ RELEVANCE:
   smooth_chamfer:
     alpha: 16
 DATASET:
+  name: "howto100m"
   moma:
     path: "/data/dir_moma"
     paradigm: "standard"
     tail_range: 400
+    use_over_sampling: True
+  howto100m:
+    path: "/data/dir_howto100m"
+    tail_range: 4000
     use_over_sampling: True
 MODEL:
   LOAD_FROM: ""
@@ -60,10 +65,9 @@ MODEL:
       slot_dim: 768
       out_dim: 384
 TRAIN:
-  dataset: "moma"
   optimizer: "adam"
   batch_size: 16
-  num_workers: 0
+  num_workers: 2
   pin_memory: True
   persistent_workers: False
   num_epochs: 800
@@ -72,7 +76,6 @@ TRAIN:
     gamma: 0.1
 EVAL:
   split: "val"
-  dataset: "moma"
   num_workers: 0
   pin_memory: True
   persistent_workers: False

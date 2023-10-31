@@ -37,7 +37,7 @@ class MOMARetrievalBaseDataset(Dataset):
 
     def _set_pairwise_similarity(self):
         type = self.cfg.RELEVANCE.type
-        print(f"Load from pre-computed surrogate measure [{type}]")
+        print(f"Load from pre-computed surrogate measure [{type}-{self.split}]")
         self.sm = np.load(f"anno/moma/sm_{type}_{self.split}.npy")
         self.sm = torch.from_numpy(self.sm).float()
                 

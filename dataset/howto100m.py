@@ -1,13 +1,13 @@
 import copy
 import torch
 import numpy as np
-from dataset.moma_base import MOMARetrievalBaseDataset
+from dataset.howto100m_base import HowTo100MRetrievalBaseDataset
 
 
-class MOMARetrievalTrainDataset(MOMARetrievalBaseDataset):
+class HowTo100MRetrievalTrainDataset(HowTo100MRetrievalBaseDataset):
     def __init__(self, cfg):
         super().__init__(cfg, "train")
-        
+
     def sample_pair(self, idx):
         similarties = self.sm[idx]
         _, sorted_idx = torch.sort(similarties, descending=True)
@@ -21,7 +21,7 @@ class MOMARetrievalTrainDataset(MOMARetrievalBaseDataset):
             pair_idx = sorted_idx[np.random.randint(len(sorted_idx))]
 
         return pair_idx, similarties[pair_idx]
-        
+
     def __getitem__(self, idx):
         anchor = copy.deepcopy(self.anno[idx])
         anchor["video"] = self.load_video(anchor["video_id"])
@@ -31,33 +31,35 @@ class MOMARetrievalTrainDataset(MOMARetrievalBaseDataset):
         pair["video"] = self.load_video(pair["video_id"])
         
         return anchor, pair, similarity
-        
-        
-class MOMARetrievalEvalDataset(MOMARetrievalBaseDataset):
+
+
+class HowTo100MRetrievalEvalDataset(HowTo100MRetrievalBaseDataset):
     def __init__(self, cfg, split):
         super().__init__(cfg, split)
 
         self._prepare_batches()
-        
+
     def _prepare_batches(self):
         self.batches = []
         for i, query in enumerate(self.anno):
             batch = {
-                "query_video_id": query["video_id"], # video id e.g. '-49z-lj8eYQ'
-                "query_cname": query["cname"], # activity name e.g. "basketball game"
+                "query_video_id": query["video_id"], 
+                "query_c1name": query["category_1"], 
+                "query_c2name": query["category_2"],
                 "trg_video_ids": [x["video_id"] for x in self.anno if query["video_id"] != x["video_id"]],
-                "trg_cnames": [x["cname"] for x in self.anno if query["video_id"] != x["video_id"]],
+                "trg_c1names": [x["category_1"] for x in self.anno if query["video_id"] != x["video_id"]],
+                "trg_c2names": [x["category_2"] for x in self.anno if query["video_id"] != x["video_id"]],
             }
 
             similarities = torch.cat([self.sm[i][:i], self.sm[i][i+1:]])
             similarities = torch.clamp(similarities, min=0.)
             batch["similarities"] = similarities
-            
+
             self.batches.append(batch)
 
     def __getitem__(self, idx):
         batch = copy.deepcopy(self.batches[idx]) # batch size is always 1 for eval
         query_video = self.load_video(batch["query_video_id"])
         batch["query_video"] = query_video
-        
+
         return batch

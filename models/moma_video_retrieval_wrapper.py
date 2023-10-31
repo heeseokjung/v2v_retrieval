@@ -94,7 +94,7 @@ def visualize_result(
     plt.close()
 
 
-class VideoRetrievalWrapper(pl.LightningModule):
+class MOMAVideoRetrievalWrapper(pl.LightningModule):
     def __init__(self, cfg, video_encoder):
         super().__init__()
         
