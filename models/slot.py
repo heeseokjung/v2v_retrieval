@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -40,6 +42,11 @@ class SlotAttention(nn.Module):
         self.norm_slots  = nn.LayerNorm(args.dim)
         self.norm_pre_ff = nn.LayerNorm(args.dim)
 
+        self.pos_emb = nn.Embedding(args.num_slots, args.dim)
+        self.register_buffer("pos_ids", torch.arange(args.num_slots, dtype=torch.long))
+
+        # self.count = 0
+
     def forward(self, inputs, pad_mask, num_slots = None):
         b, n, d = inputs.shape
         n_s = num_slots if num_slots is not None else self.num_slots
@@ -51,7 +58,17 @@ class SlotAttention(nn.Module):
         inputs = self.norm_input(inputs)        
         k, v = self.to_k(inputs), self.to_v(inputs)
 
-        for _ in range(self.iters):
+        ########################## visualization ##########################
+        # inputs_v = inputs[:].squeeze(dim=0)
+        # inputs_v = F.normalize(inputs_v, dim=-1)
+        # print(f"inputs_v: {inputs_v.shape}")
+        # tsm = torch.mm(inputs_v, inputs_v.t()).detach().cpu().numpy()
+        # sns.heatmap(tsm)
+        # plt.savefig(f"/root/slot_vis/tsm/{self.count}.png")
+        # plt.close()
+        ###################################################################
+
+        for i in range(self.iters):
             slots_prev = slots
 
             slots = self.norm_slots(slots)
@@ -63,6 +80,14 @@ class SlotAttention(nn.Module):
             if pad_mask is not None:
                 attn = attn.masked_fill(pad_mask[:,None,:], 0) # mask out padding
 
+            ########################## visualization ##########################
+            # attn_v = attn[:].detach().cpu().numpy()
+            # attn_v = attn_v.squeeze(axis=0)
+            # sns.heatmap(attn_v)
+            # plt.savefig(f"/root/slot_vis/slot/{self.count}_iter{i}.png")
+            # plt.close()
+            ###################################################################
+
             updates = torch.einsum('bjd,bij->bid', v, attn)
 
             slots = self.gru(
@@ -73,7 +98,10 @@ class SlotAttention(nn.Module):
             slots = slots.reshape(b, -1, d)
             slots = slots + self.fc2(F.relu(self.fc1(self.norm_pre_ff(slots))))
 
-        return slots
+        # self.count += 1
+
+        # return slots
+        return slots + self.pos_emb(self.pos_ids)
 
 
 class TransformerEncoder(nn.Module):
@@ -100,18 +128,19 @@ class TransformerEncoder(nn.Module):
 
     def forward(self, x, pad_mask):
         x = self.linear(x)
-        in_pos_emb = self.in_pos_emb(self.pos_ids[:x.shape[1]])
-        x = x + in_pos_emb[None, :]
+        # in_pos_emb = self.in_pos_emb(self.pos_ids[:x.shape[1]])
+        # x = x + in_pos_emb[None, :]
         x = self.transformer_encoder(x, src_key_padding_mask=pad_mask)
-        out_pos_emb = self.out_pos_emb(self.pos_ids[:x.shape[1]])
-        return x + out_pos_emb[None, :]
+        # out_pos_emb = self.out_pos_emb(self.pos_ids[:x.shape[1]])
+        # return x + out_pos_emb[None, :]
+        return x
     
 
 class SlotDecoder(nn.Module):
     def __init__(self, args):
         super().__init__()
         
-        self.linear = nn.Linear(args.in_dim, args.out_dim)
+        self.linear = nn.Linear(args.slot_dim, args.out_dim)
         # TODO:
         # ConvTranspose1d -> reconstruction loss
 

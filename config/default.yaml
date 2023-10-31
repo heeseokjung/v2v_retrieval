@@ -40,23 +40,16 @@ MODEL:
     use_cc_web_pretrained: True
     freeze: True
     clip_duration: 8
-  TRANSFORMER:
-    in_dim: 768
-    d_model: 768
-    max_len: 700
-    nhead: 8
-    dim_feedforward: 1024
-    dropout: 0.1
-    num_layers: 2
   SLOT: 
+    feat: "s3d"
     slot_attn:
       num_slots: 8
       dim: 768
-      iters: 3
+      iters: 6
       eps: 1e-8
       hidden_dim: 768
     encoder:
-      in_dim: 768
+      in_dim: 1024
       d_model: 768
       max_len: 700
       nhead: 8
@@ -64,7 +57,7 @@ MODEL:
       dropout: 0.1
       num_layers: 2
     decoder:
-      in_dim: 768
+      slot_dim: 768
       out_dim: 384
 TRAIN:
   dataset: "moma"
@@ -73,10 +66,10 @@ TRAIN:
   num_workers: 0
   pin_memory: True
   persistent_workers: False
-  num_epochs: 400
+  num_epochs: 800
   lr: 0.00001
   loss:
-    gamma: 0.05
+    gamma: 0.1
 EVAL:
   split: "val"
   dataset: "moma"

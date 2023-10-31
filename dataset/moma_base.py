@@ -96,9 +96,14 @@ class MOMARetrievalBaseDataset(Dataset):
 
                 return torch.stack(video, dim=0) # n_clips x n_frames(=4) x 3 x 224 x 224
         elif self.cfg.MODEL.name == "ours":
-            path = os.path.join(self.args.path, "feats", "frozen", f"{vid}.npy")
-            feat = torch.from_numpy(np.load(path)).float() # n_clips x n_patches (785) x d
-            return feat[:,0,:] # only CLS token
+            if self.cfg.MODEL.SLOT.feat == "frozen":
+                path = os.path.join(self.args.path, "feats", "frozen", f"{vid}.npy")
+                feat = torch.from_numpy(np.load(path)).float() # n_clips x n_patches (785) x d
+                return feat[:,0,:] # only CLS token
+            elif self.cfg.MODEL.SLOT.feat == "s3d":
+                path = os.path.join(self.args.path, "feats", "s3d", f"{vid}.npy")
+                feat = torch.from_numpy(np.load(path)).float() # n_clips x d
+                return feat
         else:
             raise NotImplementedError
 

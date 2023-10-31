@@ -18,6 +18,7 @@ from utils.loss import compute_mse_loss
 from tslearn.metrics import SoftDTWLossPyTorch
 from utils.metric import nDCGMetric
 from utils.metric import MSEError
+from tqdm import tqdm
 
 
 def cdist(x, y):
@@ -30,8 +31,6 @@ def compute_ndcg_single(pred, sm):
     topk = [5, 10, 20, 40]
     _, pred_idx = torch.topk(pred, max(topk))
     _, opt_idx = torch.topk(sm, max(topk))
-
-    sm = (sm - 0.2) / 0.2
 
     scores = {}
     for k in topk:
@@ -54,9 +53,9 @@ def visualize_result(
         model, 
         pred,
         sm, 
-        src_vid,
-        src_activity_name,
-        ref_activity_names, 
+        query_vid,
+        query_cname,
+        trg_cnames, 
         topk=None
     ):
 
@@ -66,16 +65,16 @@ def visualize_result(
     if topk is not None:
         pred = pred[:topk]
         sm = sm[:topk]
-        ref_activity_names[:topk]
+        trg_cnames[:topk]
 
     _, sorted_idx = torch.sort(sm, descending=True)
     sm_y = sm[sorted_idx].detach().cpu().numpy()
     pred_y = pred[sorted_idx].detach().cpu().numpy()
-    x_label = [ref_activity_names[idx] for idx in sorted_idx]
+    x_label = [trg_cnames[idx] for idx in sorted_idx]
 
     plt.figure(figsize=(30, 5))
     plt.title((
-        f"{src_vid} [{src_activity_name}] "
+        f"{query_vid} [{query_cname}] "
         f"nDCG@5: {ndcg['nDCG@5']} "
         f"nDCG@10: {ndcg['nDCG@10']} "
         f"nDCG@20: {ndcg['nDCG@20']} "
@@ -84,14 +83,14 @@ def visualize_result(
     ))
     plt.xticks(np.arange(len(x_label)), label=x_label, rotation=90)
     plt.gca().set_xticklabels(x_label)
-    plt.xlim([0, len(ref_activity_names)])
+    plt.xlim([0, len(trg_cnames)])
     plt.ylim([-0.1, 1.1])
     plt.grid(True)
     plt.tight_layout()
 
     plt.plot(np.arange(len(sm)), sm_y, color="red")
     plt.plot(np.arange(len(pred)), pred_y, color="black")
-    plt.savefig(os.path.join(path, model,  f"{src_vid}.png"))
+    plt.savefig(os.path.join(path, model,  f"{query_vid}.png"))
     plt.close()
 
 
@@ -162,18 +161,21 @@ class VideoRetrievalWrapper(pl.LightningModule):
             sm_loss = self.mse_loss(pred, similarities)
 
             # smooth-chamfer similarity loss
-            # sc_loss = []
-            # alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
-            # for vid, emb in zip(anchor_video_ids, anchor_embs):
-            #     sc_loss.append(-1. * compute_smooth_chamfer_similarity(emb, self.id2cemb[vid], alpha))
-            # for vid, emb in zip(pair_video_ids, pair_embs):
-            #     sc_loss.append(-1. * compute_smooth_chamfer_similarity(emb, self.id2cemb[vid], alpha))
-            # sc_loss = torch.stack(sc_loss)
+            sc_loss = []
+            alpha = self.cfg.RELEVANCE.smooth_chamfer.alpha
+            for vid, emb in zip(anchor_video_ids, anchor_embs):
+                cemb = torch.from_numpy(self.id2cemb[vid]).float().to(emb.device)
+                sc_loss.append(-1. * compute_smooth_chamfer_similarity(emb, cemb, alpha))
+            for vid, emb in zip(pair_video_ids, pair_embs):
+                cemb = torch.from_numpy(self.id2cemb[vid]).float().to(emb.device)
+                sc_loss.append(-1. * compute_smooth_chamfer_similarity(emb, cemb, alpha))
+            sc_loss = torch.stack(sc_loss)
+            sc_loss = sc_loss.mean()
 
             # total loss
             gamma = self.cfg.TRAIN.loss.gamma
-            loss = sm_loss
-            # loss = sm_loss + gamma*sc_loss
+            # loss = sm_loss
+            loss = sm_loss + gamma*sc_loss
 
             self.log(
                 "train/loss",
@@ -193,14 +195,14 @@ class VideoRetrievalWrapper(pl.LightningModule):
                 sync_dist=True,
             ) 
 
-            # self.log(
-            #     "train/sc_loss",
-            #     sc_loss,
-            #     on_step=True,
-            #     prog_bar=True,
-            #     logger=True,
-            #     sync_dist=True,
-            # ) 
+            self.log(
+                "train/sc_loss",
+                gamma*sc_loss,
+                on_step=True,
+                prog_bar=True,
+                logger=True,
+                sync_dist=True,
+            ) 
         else: # baseline
            anchor_embs = self(anchor_videos) # b x d
            pair_embs = self(pair_videos) # b x d
@@ -278,6 +280,16 @@ class VideoRetrievalWrapper(pl.LightningModule):
                 query_emb = F.normalize(query_emb, dim=-1)
                 trg_embs = F.normalize(trg_embs, dim=-1)
                 pred = torch.matmul(query_emb, trg_embs.t())
+
+            # visualize_result(
+            #     path="/root/visualize_results",
+            #     model=self.cfg.MODEL.name,
+            #     pred=pred,
+            #     sm=similarities,
+            #     query_vid=query_vid,
+            #     query_cname=query_cname,
+            #     trg_cnames=trg_cnames, 
+            # )
 
             self.ndcg_metric.update(pred, similarities)
             self.mse_error.update(pred, similarities)
