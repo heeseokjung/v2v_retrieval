@@ -4,3 +4,5 @@ wandb
 *.ckpt
 etc/*.pt
 anno
+extract_feats/*.pth
+extract_feats/*.npy

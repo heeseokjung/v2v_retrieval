@@ -61,15 +61,15 @@ def main():
     ndcg_metric = nDCGMetric([5, 10, 20, 40])
     mse_error = MSEError()
 
-    with open(f"anno/moma/{split}.ndjson", "r") as f:
+    with open(f"anno/howto100m/{split}.ndjson", "r") as f:
         anno = ndjson.load(f)
     video_ids = [x["video_id"] for x in anno]
 
-    sm = np.load(f"anno/moma/sm_dtw_{split}.npy")
+    sm = np.load(f"anno/howto100m/sm_dtw_{split}.npy")
     sm = torch.from_numpy(sm).float().to("cuda")
 
     id2vemb = {}
-    path = "/data/dir_moma/feats/s3d"
+    path = "/data/dir_howto100m/feats/s3d"
     for vid in video_ids:
         emb = np.load(os.path.join(path, f"{vid}.npy"))
         emb = emb.mean(axis=0)
@@ -92,7 +92,7 @@ def main():
     score = ndcg_metric.compute()
     score["mse_error"] = mse_error.compute()
 
-    print(f"< MOMA - S3D w/o fine-tuning >")
+    print(f"< HowTo100M - S3D w/o no fine-tuning >")
     for k, v in score.items():
         print(f"[{k}]: {v}")
 
