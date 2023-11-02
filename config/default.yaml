@@ -66,11 +66,11 @@ MODEL:
       out_dim: 384
 TRAIN:
   optimizer: "adam"
-  batch_size: 16
+  batch_size: 8
   num_workers: 2
   pin_memory: True
   persistent_workers: False
-  num_epochs: 800
+  num_epochs: 400
   lr: 0.00001
   loss:
     gamma: 0.1

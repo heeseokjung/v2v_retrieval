@@ -251,7 +251,17 @@ class HowTo100MVideoRetrievalWrapper(pl.LightningModule):
         # semantic similarities (surrogate measure)
         similarities = batch["similarities"]
         
-        query_emb = self.val_shared_step(query_video_id, query_video) # save in cache
+        # query_emb = self.val_shared_step(query_video_id, query_video) # save in cache
+        if self.cfg.MODEL.name == "ours":
+            query_video = query_video.unsqueeze(dim=0) # 1 x n x d or 1 x d
+            emb = self(query_video, pad_mask=None).squeeze(dim=0) # k x d or d
+            emb = emb.detach().cpu().numpy()
+            if self.current_epoch % 10 == 0 or (self.current_epoch == self.trainer.max_epochs - 1):
+                os.makedirs(os.path.join(self.cfg.DATASET.howto100m.path, "out", str(self.current_epoch)), exist_ok=True)
+                np.save(
+                    os.path.join(self.cfg.DATASET.howto100m.path, "out", str(self.current_epoch), f"{query_video_id}.npy"),
+                    emb,
+                )
 
         self.eval_query_vids.append(query_video_id)
         self.eval_query_cnames.append(query_c1name)
@@ -267,21 +277,13 @@ class HowTo100MVideoRetrievalWrapper(pl.LightningModule):
             self.eval_trg_cnames,
             self.eval_similarities,
         ):
-            query_emb = self.id2vemb[query_vid]
-            trg_embs = [self.id2vemb[vid] for vid in trg_vids]
-            trg_embs = torch.stack(trg_embs, dim=0) # b x k x d or b x d
-
             if self.cfg.MODEL.name == "ours": # proposed
-                pred = []
-                query_emb = query_emb.unsqueeze(dim=0)
-                k = query_emb.shape[1] # number of slot
-                for trg_emb in trg_embs:
-                    trg_emb = trg_emb.unsqueeze(dim=0)
-                    p = 1. - (self.sdtw_loss(query_emb, trg_emb) / 2*k)
-                    pred.append(p.squeeze())
-                pred = torch.stack(pred)
+                ...
             else: # baseline
+                query_emb = self.id2vemb[query_vid]
                 query_emb = F.normalize(query_emb, dim=-1)
+                trg_embs = [self.id2vemb[vid] for vid in trg_vids]
+                trg_embs = torch.stack(trg_embs, dim=0) # b x k x d or b x d
                 trg_embs = F.normalize(trg_embs, dim=-1)
                 pred = torch.matmul(query_emb, trg_embs.t())
 
@@ -295,24 +297,24 @@ class HowTo100MVideoRetrievalWrapper(pl.LightningModule):
             #     trg_cnames=trg_cnames, 
             # )
 
-            self.ndcg_metric.update(pred, similarities)
-            self.mse_error.update(pred, similarities)
+        #     self.ndcg_metric.update(pred, similarities)
+        #     self.mse_error.update(pred, similarities)
 
-        score = self.ndcg_metric.compute()
-        score["mse_error"] = self.mse_error.compute()
+        # score = self.ndcg_metric.compute()
+        # score["mse_error"] = self.mse_error.compute()
         
-        for k, v in score.items():
-            self.log(
-                f"val/{k}",
-                v,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=True,
-                logger=True,
-                sync_dist=True,
-            )
+        # for k, v in score.items():
+        #     self.log(
+        #         f"val/{k}",
+        #         v,
+        #         on_step=False,
+        #         on_epoch=True,
+        #         prog_bar=True,
+        #         logger=True,
+        #         sync_dist=True,
+        #     )
             
-        self.print(f"Test score: {score}")
+        # self.print(f"Test score: {score}")
         
         self.id2vemb = {}
         self.eval_query_vids = []

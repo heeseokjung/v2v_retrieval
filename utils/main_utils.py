@@ -53,7 +53,7 @@ def init_config(path="config/default.yaml"):
         seed_everything(cfg.SEED)
         
     torch.set_float32_matmul_precision("high")
-    torch.multiprocessing.set_start_method('spawn')
+    # torch.multiprocessing.set_start_method('spawn')
     warnings.filterwarnings("ignore", category=PossibleUserWarning)
     
     logger = set_up_logger()
