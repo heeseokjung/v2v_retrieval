@@ -8,7 +8,7 @@ RELEVANCE:
   smooth_chamfer:
     alpha: 16
 DATASET:
-  name: "howto100m"
+  name: "moma"
   moma:
     path: "/data/dir_moma"
     paradigm: "standard"
@@ -48,7 +48,7 @@ MODEL:
   SLOT: 
     feat: "s3d"
     slot_attn:
-      num_slots: 8
+      num_slots: 12
       dim: 768
       iters: 6
       eps: 1e-8
@@ -66,8 +66,8 @@ MODEL:
       out_dim: 384
 TRAIN:
   optimizer: "adam"
-  batch_size: 8
-  num_workers: 2
+  batch_size: 16
+  num_workers: 0
   pin_memory: True
   persistent_workers: False
   num_epochs: 400

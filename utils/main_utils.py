@@ -190,10 +190,21 @@ def init_trainer(cfg):
     elif cfg.TRAINER.logger == "wandb":
         logger = pl.loggers.WandbLogger(project="cvpr24_video_retrieval")
     
+    # when use ddp (HowTo100M, ActivityNet-Captions)
+    # trainer = pl.Trainer(
+    #     accelerator="gpu",
+    #     devices=[0, 1, 2],
+    #     strategy="ddp",
+    #     logger=logger,
+    #     log_every_n_steps=1,
+    #     num_sanity_val_steps=0,
+    #     max_epochs=cfg.TRAIN.num_epochs,
+    # )
+
+    # do not use ddp (MOMA-LRG)
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[0, 1, 2],
-        strategy="ddp",
+        devices=[1],
         logger=logger,
         log_every_n_steps=1,
         num_sanity_val_steps=0,
