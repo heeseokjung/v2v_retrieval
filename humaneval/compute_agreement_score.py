@@ -4,6 +4,12 @@ import numpy as np
 import pandas as pd
 
 
+############################# Algorithms #############################
+def cosine_similarity(x, y):
+    return np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y))
+######################################################################
+
+
 class User:
     def __init__(self, session_id):
         self.session_id = session_id
@@ -110,8 +116,24 @@ def compute_triplet_statistics(triplet_list):
     s3 = np.array(s3).sum() / polls.sum()
     s4 = np.array(s4).sum() / polls.sum()
 
-    print(f"Number of polls per triplet: {polls.mean()} ± {polls.std()}, [{polls.min()}, {polls.max()}]")
+    print(f"Number of polls per triplet: {polls.mean()} ± {polls.std()}, [min: {polls.min()}, max: {polls.max()}]")
     print(f"Distribution of choices: s1 ({s1:.2f}) s2 ({s2:.2f}) s3 ({s3:.2f}) s4 ({s4:.2f})")
+
+
+def metric_human(choice, s1, s2, s3, s4):
+    if choice == "s1":
+        return (s1 + 0.5*s3 - 1) / (s1 + s2 + s3 + s4 - 1)
+    elif choice == "s2":
+        return (s2 + 0.5*s3 - 1) / (s1 + s2 + s3 + s4 - 1)
+    elif choice == "s3":
+        return (0.5*s1 + 0.5*s2 + s3 - 1) / (s1 + s2 + s3 + s4 - 1)
+    
+
+def metric_algorithm(choice, s1, s2, s3, s4):
+    if choice == "s1":
+        return (s1 + 0.5*s3) / (s1 + s2 + s3 + s4)
+    elif choice == "s2":
+        return (s2 + 0.5*s3) / (s1 + s2 + s3 + s4)
 
 
 def compute_inter_human_agreement(user_list, triplet_list):
@@ -129,11 +151,11 @@ def compute_inter_human_agreement(user_list, triplet_list):
                 continue
             
             if choice == "s1":
-                per_triplet_scores.append((s1  + 0.5*s3 - 1) / (s1 + s2 + s3 + s4 - 1))
+                per_triplet_scores.append(metric_human(choice, s1, s2, s3, s4))
             elif choice == "s2":
-                per_triplet_scores.append((s2 + 0.5*s3 - 1) / (s1 + s2 + s3 + s4 - 1))
+                per_triplet_scores.append(metric_human(choice, s1, s2, s3, s4))
             elif choice == "s3":
-                per_triplet_scores.append((0.5*s1 + 0.5*s2 + s3 - 1) / (s1 + s2 + s3 + s4 - 1))
+                per_triplet_scores.append(metric_human(choice, s1, s2, s3, s4))
             elif choice == "s4":
                 '''
                 If a human marks that neither of the candidates is relevant for a triplet, 
@@ -150,7 +172,7 @@ def compute_inter_human_agreement(user_list, triplet_list):
     return per_user_scores.mean(), per_user_scores.std()
 
 
-def compute_random_human_agrement(triplet_list, n_iter=10):
+def compute_random_human_agreement(triplet_list, n_iter=10):
     scores = []
     for _ in range(n_iter):
         scores_per_run = []
@@ -166,13 +188,73 @@ def compute_random_human_agrement(triplet_list, n_iter=10):
             random_choice = random.randint(0, 1)
 
             if random_choice == 0:
-                scores_per_run.append(s1 / (s1 + s2))
+                scores_per_run.append(metric_algorithm("s1", s1, s2, s3, s4))
             elif random_choice == 1:
-                scores_per_run.append(s2 / (s1 + s2))
+                scores_per_run.append(metric_algorithm("s2", s1, s2, s3, s4))
 
         if scores_per_run:
             scores.append(np.array(scores_per_run).mean())
     
+    scores = np.array(scores)
+    return scores.mean(), scores.std()
+
+
+def compute_visual_agreement(triplet_list):
+    moma_path = "/data/dir_moma/feats/s3d"
+    activitynet_path = "/data/dir_activitynet/feats/imagenet"
+
+    scores = []
+    for triplet in triplet_list:
+        dataset = triplet.dataset
+        s1 = triplet.s1
+        s2 = triplet.s2
+        s3 = triplet.s3
+        s4 = triplet.s4
+
+        if s1 + s2 < 2:
+            continue
+
+        if dataset == "moma-lrg":
+            q = np.load(os.path.join(moma_path, f"{triplet.qvid}.npy")).mean(axis=0)
+            v1 = np.load(os.path.join(moma_path, f"{triplet.vid1}.npy")).mean(axis=0)
+            v2 = np.load(os.path.join(moma_path, f"{triplet.vid2}.npy")).mean(axis=0)
+        elif dataset == "activitynet-captions":
+            q = np.load(os.path.join(activitynet_path, f"{triplet.qvid}.npy")).mean(axis=0)
+            v1 = np.load(os.path.join(activitynet_path, f"{triplet.vid1}.npy")).mean(axis=0)
+            v2 = np.load(os.path.join(activitynet_path, f"{triplet.vid2}.npy")).mean(axis=0)
+
+        pred1 = cosine_similarity(q, v1)
+        pred2 = cosine_similarity(q, v2)
+
+        if pred1 > pred2:
+            scores.append(metric_algorithm("s1", s1, s2, s3, s4))
+        elif pred1 < pred2:
+            scores.append(metric_algorithm("s2", s1, s2, s3, s4))
+        else:
+            continue
+        
+    scores = np.array(scores)
+    return scores.mean(), scores.std()
+
+
+def compute_dtw_agreement(triplet_list):
+    scores = []
+    for triplet in triplet_list:
+        s1 = triplet.s1
+        s2 = triplet.s2
+        s3 = triplet.s3
+        s4 = triplet.s4
+
+        if s1 + s2 < 2:
+            continue
+
+        if triplet.rel1 > triplet.rel2:
+            scores.append(metric_algorithm("s1", s1, s2, s3, s4))
+        elif triplet.rel1 < triplet.rel2:
+            scores.append(metric_algorithm("s2", s1, s2, s3, s4))
+        else:
+            raise ValueError
+        
     scores = np.array(scores)
     return scores.mean(), scores.std()
 
@@ -190,8 +272,16 @@ def main():
     print(f"inter-human agreement score: {mu} ± {std}")
 
     # random-human agreement
-    mu, std = compute_random_human_agrement(triplet_list)
+    mu, std = compute_random_human_agreement(triplet_list)
     print(f"random-human agreement score: {mu} ± {std}")
+
+    # visual-human agreement
+    mu, std = compute_visual_agreement(triplet_list)
+    print(f"visual-human agreement score: {mu} ± {std}")
+
+    # dtw agreement
+    mu, std = compute_dtw_agreement(triplet_list)
+    print(f"dtw-human agreement score: {mu} ± {std}")
 
 
 if __name__ == "__main__":

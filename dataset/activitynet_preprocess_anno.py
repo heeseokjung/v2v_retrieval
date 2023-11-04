@@ -16,10 +16,12 @@ def main():
     for split in ["train", "val_1"]:
         with open(os.path.join(anno_path, f"{split}.json"), "r") as f:
             data = json.load(f)
+        
+        if split == "train": # issue: video file corrupted
+            data.pop("v_N8otQdjR96s")
 
         video_ids = []
         for vid, captions in tqdm(data.items(), desc=f"[{split}]"):
-            vid = vid[2:] # remove prefix (v_)
             video_ids.append(vid)
             sentences = captions["sentences"]
             sentences = [s.strip() for s in sentences]

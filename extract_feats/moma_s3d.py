@@ -75,7 +75,7 @@ def main():
         vid = batch["vid"][0]
         video = batch["video"].squeeze(dim=0) # sec x 3 x fps x 224 x 224
 
-        features = np.zeros((video.shape[0], 1024))
+        features = torch.zeros((video.shape[0], 1024))
         n_iter = int(math.ceil(video.shape[0] / bs))
         for i in range(n_iter):
             s = i * bs
@@ -83,8 +83,9 @@ def main():
             x = video[s:e, ...].to("cuda")
             with torch.no_grad():
                 feat = model(x)["mixed_5c"]
-            features[s:e,:] = feat.detach().cpu().numpy()
+            features[s:e,:] = feat.detach().cpu()
 
+        features = features.numpy()
         np.save(os.path.join(out_path, f"{vid}.npy"), features)
 
 
