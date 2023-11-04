@@ -16,7 +16,11 @@ DATASET:
     use_over_sampling: True
   howto100m:
     path: "/data/dir_howto100m"
-    tail_range: 4000
+    tail_range: 3000
+    use_over_sampling: True
+  activitynet:
+    path: "/data/dir_activitynet"
+    tail_range: 3000
     use_over_sampling: True
 MODEL:
   LOAD_FROM: ""
