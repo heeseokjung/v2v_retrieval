@@ -61,7 +61,6 @@ class SlotAttention(nn.Module):
         ########################## visualization ##########################
         # inputs_v = inputs[:].squeeze(dim=0)
         # inputs_v = F.normalize(inputs_v, dim=-1)
-        # print(f"inputs_v: {inputs_v.shape}")
         # tsm = torch.mm(inputs_v, inputs_v.t()).detach().cpu().numpy()
         # sns.heatmap(tsm)
         # plt.savefig(f"/root/slot_vis/tsm/{self.count}.png")
@@ -100,7 +99,6 @@ class SlotAttention(nn.Module):
 
         # self.count += 1
 
-        # return slots
         return slots + self.pos_emb(self.pos_ids)
 
 

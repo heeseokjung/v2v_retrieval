@@ -241,21 +241,20 @@ class ActivityNetCaptionsVideoRetrievalWrapper(pl.LightningModule):
         # semantic similarities (surrogate measure)
         similarities = batch["similarities"]
         
-        # query_emb = self.val_shared_step(query_video_id, query_video) # save in cache
-        if self.cfg.MODEL.name == "ours":
+        if self.cfg.MODEL.name == "s3d":
+            query_emb = self.val_shared_step(query_video_id, query_video) # save in cache
+            self.eval_query_vids.append(query_video_id)
+            self.eval_trg_vids.append(trg_video_ids)
+            self.eval_similarities.append(similarities)
+        elif self.cfg.MODEL.name == "ours":
             query_video = query_video.unsqueeze(dim=0) # 1 x n x d or 1 x d
             emb = self(query_video, pad_mask=None).squeeze(dim=0) # k x d or d
             emb = emb.detach().cpu().numpy()
-            if self.current_epoch % 10 == 0 or (self.current_epoch == self.trainer.max_epochs - 1):
-                os.makedirs(os.path.join(self.cfg.DATASET.activitynet.path, "out", str(self.current_epoch)), exist_ok=True)
-                np.save(
-                    os.path.join(self.cfg.DATASET.activitynet.path, "out", str(self.current_epoch), f"{query_video_id}.npy"),
-                    emb,
-                )
-
-        self.eval_query_vids.append(query_video_id)
-        self.eval_trg_vids.append(trg_video_ids)
-        self.eval_similarities.append(similarities)
+            os.makedirs(os.path.join(self.cfg.DATASET.activitynet.path, "out", str(self.current_epoch)), exist_ok=True)
+            np.save(
+                os.path.join(self.cfg.DATASET.activitynet.path, "out", str(self.current_epoch), f"{query_video_id}.npy"),
+                emb,
+            )
         
     def validation_epoch_end(self, validation_step_outputs):
         if self.cfg.MODEL.name == "s3d":

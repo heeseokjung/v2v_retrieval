@@ -23,11 +23,11 @@ class ActivityNetCaptionsRetrievalTrainDataset(ActivityNetCaptionsRetrievalBaseD
         return pair_idx, similarties[pair_idx]
 
     def __getitem__(self, idx):
-        anchor = copy.deepcopy(self.anno[idx])
+        anchor = {"video_id": self.anno[idx]}
         anchor["video"] = self.load_video(anchor["video_id"])
-        
+
         pair_idx, similarity = self.sample_pair(idx)
-        pair = copy.deepcopy(self.anno[pair_idx])
+        pair = {"video_id": self.anno[pair_idx]}
         pair["video"] = self.load_video(pair["video_id"])
         
         return anchor, pair, similarity
@@ -41,10 +41,10 @@ class ActivityNetCaptionsRetrievalEvalDataset(ActivityNetCaptionsRetrievalBaseDa
 
     def _prepare_batches(self):
         self.batches = []
-        for i, query in enumerate(self.anno):
+        for i, query_video_id in enumerate(self.anno):
             batch = {
-                "query_video_id": query["video_id"], 
-                "trg_video_ids": [x["video_id"] for x in self.anno if query["video_id"] != x["video_id"]],
+                "query_video_id": query_video_id, 
+                "trg_video_ids": [vid for vid in self.anno if query_video_id != vid],
             }
 
             similarities = torch.cat([self.sm[i][:i], self.sm[i][i+1:]])

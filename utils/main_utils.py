@@ -32,6 +32,7 @@ from models.slot import TemporalSlotAttentionVideoEncoder
 
 from models.moma_video_retrieval_wrapper import MOMAVideoRetrievalWrapper
 from models.howto100m_video_retrieval_wrapper import HowTo100MVideoRetrievalWrapper
+from models.activitynet_video_retrieval_wrapper import ActivityNetCaptionsVideoRetrievalWrapper
 
 
 def seed_everything(seed):
@@ -175,8 +176,19 @@ def init_model(cfg):
                 cfg=cfg,
                 video_encoder=video_encoder,
             )
-    elif cfg.DATASET.name == "activitynet-captions":
-        ...
+    elif cfg.DATASET.name == "activitynet":
+        if "LOAD_FROM" in cfg.MODEL and len(cfg.MODEL.LOAD_FROM) > 0:
+            model = ActivityNetCaptionsVideoRetrievalWrapper.load_from_checkpoint(
+                cfg=cfg,
+                video_encoder=video_encoder,
+                checkpoint_path=os.path.join(cfg.PATH.CKPT_PATH, cfg.MODEL.LOAD_FROM, "model-v1.ckpt"),
+                strict=True,
+            )
+        else:
+            model = ActivityNetCaptionsVideoRetrievalWrapper(
+                cfg=cfg,
+                video_encoder=video_encoder,
+            )
     else:
         raise NotImplementedError
     
@@ -193,10 +205,11 @@ def init_trainer(cfg):
     # when use ddp (HowTo100M, ActivityNet-Captions)
     # trainer = pl.Trainer(
     #     accelerator="gpu",
-    #     devices=[0, 1, 2],
+    #     devices=[1, 2],
     #     strategy="ddp",
     #     logger=logger,
     #     log_every_n_steps=1,
+    #     check_val_every_n_epoch=10,
     #     num_sanity_val_steps=0,
     #     max_epochs=cfg.TRAIN.num_epochs,
     # )
@@ -207,6 +220,7 @@ def init_trainer(cfg):
         devices=[1],
         logger=logger,
         log_every_n_steps=1,
+        check_val_every_n_epoch=10,
         num_sanity_val_steps=0,
         max_epochs=cfg.TRAIN.num_epochs,
     )

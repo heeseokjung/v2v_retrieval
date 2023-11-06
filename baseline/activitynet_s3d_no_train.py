@@ -1,5 +1,5 @@
 import os
-import ndjson
+import json
 import argparse
 import numpy as np
 import torch
@@ -61,22 +61,20 @@ def main():
     ndcg_metric = nDCGMetric([5, 10, 20, 40])
     mse_error = MSEError()
 
-    with open(f"anno/moma/{split}.ndjson", "r") as f:
-        anno = ndjson.load(f)
-    video_ids = [x["video_id"] for x in anno]
+    with open(f"anno/activitynet/{split}.json", "r") as f:
+        video_ids = json.load(f)
 
-    sm = np.load(f"anno/moma/sm_dtw_{split}.npy")
+    sm = np.load(f"anno/activitynet/sm_dtw_{split}.npy")
     sm = torch.from_numpy(sm).float().to("cuda")
 
     id2vemb = {}
-    path = "/data/dir_moma/feats/s3d"
+    path = "/data/dir_activitynet/feats/s3d"
     for vid in video_ids:
         emb = np.load(os.path.join(path, f"{vid}.npy"))
         emb = emb.mean(axis=0)
         emb = torch.from_numpy(emb).float().to("cuda")
         id2vemb[vid] = emb
 
-    ex = {}
     for i, qvid in enumerate(tqdm(video_ids, desc="[EVAL S3D w/o FT]")):
         query_emb = id2vemb[qvid] # d,
         trg_video_ids = [vid for vid in video_ids if qvid != vid]
@@ -87,20 +85,13 @@ def main():
 
         pred = F.cosine_similarity(query_emb, trg_embs)
 
-        ex[qvid] = {
-            "trg_video_ids": trg_video_ids,
-            "pred": pred,
-        }
-
         ndcg_metric.update(pred, similarities)
         mse_error.update(pred, similarities)
-
-    torch.save(ex, "s3d_no_train.pt")
 
     score = ndcg_metric.compute()
     score["mse_error"] = mse_error.compute()
 
-    print(f"< MOMA - S3D w/o fine-tuning >")
+    print(f"< ActivityNet-Captions - S3D w/o no fine-tuning >")
     for k, v in score.items():
         print(f"[{k}]: {v}")
 

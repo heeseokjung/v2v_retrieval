@@ -235,7 +235,7 @@ def get_eval_dataset(cfg):
         collate_fn = HowTo100MCollator(is_train=False, model=cfg.MODEL.name)
         return dataset, collate_fn
     elif cfg.DATASET.name == "activitynet":
-        dataset == ActivityNetCaptionsRetrievalEvalDataset(cfg, cfg.EVAL.split)
+        dataset = ActivityNetCaptionsRetrievalEvalDataset(cfg, cfg.EVAL.split)
         collate_fn = ActivityNetCaptionsCollator(is_train=False, model=cfg.MODEL.name)
         return dataset, collate_fn
     else:

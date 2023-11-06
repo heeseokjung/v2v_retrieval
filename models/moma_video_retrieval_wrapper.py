@@ -256,6 +256,7 @@ class MOMAVideoRetrievalWrapper(pl.LightningModule):
         self.eval_similarities.append(similarities)
         
     def validation_epoch_end(self, validation_step_outputs):
+        # ex = {}
         for query_vid, query_cname, trg_vids, trg_cnames, similarities in zip(
             self.eval_query_vids,
             self.eval_query_cnames,
@@ -293,6 +294,13 @@ class MOMAVideoRetrievalWrapper(pl.LightningModule):
 
             self.ndcg_metric.update(pred, similarities)
             self.mse_error.update(pred, similarities)
+
+        #     ex[query_vid] = {
+        #         "trg_video_ids": trg_vids,
+        #         "pred": pred,
+        #     }
+
+        # torch.save(ex, "s3d_ft_pred.pt")
 
         score = self.ndcg_metric.compute()
         score["mse_error"] = self.mse_error.compute()

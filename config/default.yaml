@@ -8,7 +8,7 @@ RELEVANCE:
   smooth_chamfer:
     alpha: 16
 DATASET:
-  name: "moma"
+  name: "howto100m"
   moma:
     path: "/data/dir_moma"
     paradigm: "standard"
@@ -71,16 +71,16 @@ MODEL:
 TRAIN:
   optimizer: "adam"
   batch_size: 16
-  num_workers: 0
+  num_workers: 2
   pin_memory: True
   persistent_workers: False
-  num_epochs: 400
+  num_epochs: 800
   lr: 0.00001
   loss:
     gamma: 0.1
 EVAL:
-  split: "val"
-  num_workers: 0
+  split: "test"
+  num_workers: 2
   pin_memory: True
   persistent_workers: False
 TRAINER:

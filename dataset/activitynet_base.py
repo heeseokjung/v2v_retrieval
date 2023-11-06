@@ -11,14 +11,14 @@ class ActivityNetCaptionsRetrievalBaseDataset(Dataset):
         super().__init__()
 
         self.cfg = cfg
-        self.args = cfg.DATASET.actvitynet
+        self.args = cfg.DATASET.activitynet
         self.split = split
 
         self._load_anno_data()
         self._set_pairwise_similarity()
 
     def _load_anno_data(self):
-        with open(f"anno/activitynet/{self.split}.ndjson", "r") as f:
+        with open(f"anno/activitynet/{self.split}.json", "r") as f:
             self.anno = json.load(f)
         self.id2cemb = torch.load("anno/activitynet/id2cemb.pt")
 
