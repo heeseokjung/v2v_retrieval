@@ -203,26 +203,26 @@ def init_trainer(cfg):
         logger = pl.loggers.WandbLogger(project="cvpr24_video_retrieval")
     
     # when use ddp (HowTo100M, ActivityNet-Captions)
-    # trainer = pl.Trainer(
-    #     accelerator="gpu",
-    #     devices=[1, 2],
-    #     strategy="ddp",
-    #     logger=logger,
-    #     log_every_n_steps=1,
-    #     check_val_every_n_epoch=10,
-    #     num_sanity_val_steps=0,
-    #     max_epochs=cfg.TRAIN.num_epochs,
-    # )
-
-    # do not use ddp (MOMA-LRG)
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[1],
+        devices=[0, 1, 2],
+        strategy="ddp",
         logger=logger,
         log_every_n_steps=1,
         check_val_every_n_epoch=10,
         num_sanity_val_steps=0,
         max_epochs=cfg.TRAIN.num_epochs,
     )
+
+    # do not use ddp (MOMA-LRG)
+    # trainer = pl.Trainer(
+    #     accelerator="gpu",
+    #     devices=[4],
+    #     logger=logger,
+    #     log_every_n_steps=1,
+    #     check_val_every_n_epoch=10,
+    #     num_sanity_val_steps=0,
+    #     max_epochs=cfg.TRAIN.num_epochs,
+    # )
     
     return trainer

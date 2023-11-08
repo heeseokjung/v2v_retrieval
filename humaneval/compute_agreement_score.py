@@ -1,5 +1,6 @@
 import os
 import random
+import torch
 import numpy as np
 import pandas as pd
 
@@ -7,6 +8,26 @@ import pandas as pd
 ############################# Algorithms #############################
 def cosine_similarity(x, y):
     return np.dot(x, y) / (np.linalg.norm(x) * np.linalg.norm(y))
+
+
+# numpy version
+def compute_dtw_similarity(x, y):
+    nx = x / np.linalg.norm(x, axis=-1, keepdims=True)
+    ny = y / np.linalg.norm(y, axis=-1, keepdims=True)
+    z = np.matmul(nx, ny.T)
+
+    m, n = z.shape[0], z.shape[1]
+    R = np.ones((m+1, n+1)) * -np.inf
+    R[0, 0] = 0.
+
+    for i in range(1, m+1):
+        for j in range(1, n+1):
+            r0 = R[i-1, j-1] + 2*z[i-1, j-1]
+            r1 = R[i-1, j] + z[i-1, j-1]
+            r2 = R[i, j-1] + z[i-1, j-1]
+            R[i, j] = max(r0, r1, r2) 
+
+    return R[m, n] / (m + n)
 ######################################################################
 
 
@@ -259,10 +280,49 @@ def compute_dtw_agreement(triplet_list):
     return scores.mean(), scores.std()
 
 
+def compute_dtw_global_agreement(triplet_list):
+    moma_id2cemb = torch.load("/root/cvpr24_video_retrieval/anno/moma/id2cemb.pt")
+    activitynet_id2cemb = torch.load("/root/cvpr24_video_retrieval/anno/activitynet/id2cemb.pt")
+
+    scores = []
+    for triplet in triplet_list:
+        s1 = triplet.s1
+        s2 = triplet.s2
+        s3 = triplet.s3
+        s4 = triplet.s4
+
+        if s1 + s2 < 2:
+            continue
+
+        if triplet.dataset == "moma-lrg":
+            q = moma_id2cemb[triplet.qvid]
+            v1 = moma_id2cemb[triplet.vid1]
+            v2 = moma_id2cemb[triplet.vid2]
+        elif triplet.dataset == "activitynet-captions":
+            q = activitynet_id2cemb[triplet.qvid]
+            v1 = activitynet_id2cemb[triplet.vid1]
+            v2 = activitynet_id2cemb[triplet.vid2]
+        else:
+            raise ValueError
+        
+        rel1 = compute_dtw_similarity(q, v1)
+        rel2 = compute_dtw_similarity(q, v2)
+
+        if rel1 > rel2:
+            scores.append(metric_algorithm("s1", s1, s2, s3, s4))
+        elif rel1 < rel2:
+            scores.append(metric_algorithm("s2", s1, s2, s3, s4))
+        else:
+            continue
+        
+    scores = np.array(scores)
+    return scores.mean(), scores.std()
+
+
 def main():
     # parsing polls
     user_list, triplet_list = parse_poll(num_triplets=1000, skip_anonymous=True)
-    print(f"Number of (valid) annotators: {len(user_list)}")
+    print(f"Number of annotators: {len(user_list)}")
 
     # compute statistics for triplets
     compute_triplet_statistics(triplet_list)
@@ -279,9 +339,13 @@ def main():
     mu, std = compute_visual_agreement(triplet_list)
     print(f"visual-human agreement score: {mu} ± {std}")
 
-    # dtw agreement
+    # dtw(global)-human agreement
+    mu, std = compute_dtw_global_agreement(triplet_list)
+    print(f"dtw(global)-human agreement score: {mu} ± {std}")
+
+    # dtw(sliding window)-human agreement
     mu, std = compute_dtw_agreement(triplet_list)
-    print(f"dtw-human agreement score: {mu} ± {std}")
+    print(f"dtw(sliding window)-human agreement score: {mu} ± {std}")
 
 
 if __name__ == "__main__":

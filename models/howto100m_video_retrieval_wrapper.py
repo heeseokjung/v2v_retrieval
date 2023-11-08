@@ -251,35 +251,32 @@ class HowTo100MVideoRetrievalWrapper(pl.LightningModule):
         # semantic similarities (surrogate measure)
         similarities = batch["similarities"]
         
-        # query_emb = self.val_shared_step(query_video_id, query_video) # save in cache
+        if self.cfg.MODEL.name == "s3d":
+            query_emb = self.val_shared_step(query_video_id, query_video) # save in cache
+            self.eval_query_vids.append(query_video_id)
+            self.eval_query_cnames.append(query_c1name)
+            self.eval_trg_vids.append(trg_video_ids)
+            self.eval_trg_cnames.append(trg_c1names)
+            self.eval_similarities.append(similarities)
         if self.cfg.MODEL.name == "ours":
             query_video = query_video.unsqueeze(dim=0) # 1 x n x d or 1 x d
             emb = self(query_video, pad_mask=None).squeeze(dim=0) # k x d or d
             emb = emb.detach().cpu().numpy()
-            if self.current_epoch % 10 == 0 or (self.current_epoch == self.trainer.max_epochs - 1):
-                os.makedirs(os.path.join(self.cfg.DATASET.howto100m.path, "out", str(self.current_epoch)), exist_ok=True)
-                np.save(
-                    os.path.join(self.cfg.DATASET.howto100m.path, "out", str(self.current_epoch), f"{query_video_id}.npy"),
-                    emb,
-                )
-
-        self.eval_query_vids.append(query_video_id)
-        self.eval_query_cnames.append(query_c1name)
-        self.eval_trg_vids.append(trg_video_ids)
-        self.eval_trg_cnames.append(trg_c1names)
-        self.eval_similarities.append(similarities)
+            os.makedirs(os.path.join(self.cfg.DATASET.howto100m.path, "out", str(self.current_epoch)), exist_ok=True)
+            np.save(
+                os.path.join(self.cfg.DATASET.howto100m.path, "out", str(self.current_epoch), f"{query_video_id}.npy"),
+                emb,
+            )
         
     def validation_epoch_end(self, validation_step_outputs):
-        for query_vid, query_cname, trg_vids, trg_cnames, similarities in zip(
-            self.eval_query_vids,
-            self.eval_query_cnames,
-            self.eval_trg_vids,
-            self.eval_trg_cnames,
-            self.eval_similarities,
-        ):
-            if self.cfg.MODEL.name == "ours": # proposed
-                ...
-            else: # baseline
+        if self.cfg.MODEL.name == "s3d":
+            for query_vid, query_cname, trg_vids, trg_cnames, similarities in zip(
+                self.eval_query_vids,
+                self.eval_query_cnames,
+                self.eval_trg_vids,
+                self.eval_trg_cnames,
+                self.eval_similarities,
+            ):
                 query_emb = self.id2vemb[query_vid]
                 query_emb = F.normalize(query_emb, dim=-1)
                 trg_embs = [self.id2vemb[vid] for vid in trg_vids]
@@ -287,43 +284,43 @@ class HowTo100MVideoRetrievalWrapper(pl.LightningModule):
                 trg_embs = F.normalize(trg_embs, dim=-1)
                 pred = torch.matmul(query_emb, trg_embs.t())
 
-            # visualize_result(
-            #     path="/root/visualize_results",
-            #     model=self.cfg.MODEL.name,
-            #     pred=pred,
-            #     sm=similarities,
-            #     query_vid=query_vid,
-            #     query_cname=query_cname,
-            #     trg_cnames=trg_cnames, 
-            # )
+                # visualize_result(
+                #     path="/root/visualize_results",
+                #     model=self.cfg.MODEL.name,
+                #     pred=pred,
+                #     sm=similarities,
+                #     query_vid=query_vid,
+                #     query_cname=query_cname,
+                #     trg_cnames=trg_cnames, 
+                # )
 
-        #     self.ndcg_metric.update(pred, similarities)
-        #     self.mse_error.update(pred, similarities)
+                self.ndcg_metric.update(pred, similarities)
+                self.mse_error.update(pred, similarities)
 
-        # score = self.ndcg_metric.compute()
-        # score["mse_error"] = self.mse_error.compute()
-        
-        # for k, v in score.items():
-        #     self.log(
-        #         f"val/{k}",
-        #         v,
-        #         on_step=False,
-        #         on_epoch=True,
-        #         prog_bar=True,
-        #         logger=True,
-        #         sync_dist=True,
-        #     )
+            score = self.ndcg_metric.compute()
+            score["mse_error"] = self.mse_error.compute()
             
-        # self.print(f"Test score: {score}")
-        
-        self.id2vemb = {}
-        self.eval_query_vids = []
-        self.eval_query_cnames = []
-        self.eval_trg_vids = []
-        self.eval_trg_cnames = []
-        self.eval_similarities = []
-        self.ndcg_metric.reset()
-        self.mse_error.reset()
+            for k, v in score.items():
+                self.log(
+                    f"val/{k}",
+                    v,
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=True,
+                    logger=True,
+                    sync_dist=True,
+                )
+                
+            self.print(f"Test score: {score}")
+            
+            self.id2vemb = {}
+            self.eval_query_vids = []
+            self.eval_query_cnames = []
+            self.eval_trg_vids = []
+            self.eval_trg_cnames = []
+            self.eval_similarities = []
+            self.ndcg_metric.reset()
+            self.mse_error.reset()
         
     def test_step(self, batch, batch_idx):
         return self.validation_step(batch, batch_idx)
